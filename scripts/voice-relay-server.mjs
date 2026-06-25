@@ -344,6 +344,7 @@ wss.on("connection", (twilioSocket) => {
     responseWatchdogTimer: undefined,
     responseWatchdogFallbackSent: false,
     setupAt: 0,
+    connectedAt: Date.now(),
     firstPromptReceived: false,
     lastClientSpeakingAt: 0,
     lastAgentSpeakingAt: 0,
@@ -529,7 +530,8 @@ wss.on("connection", (twilioSocket) => {
     if (session.endCallFallbackTimer) clearTimeout(session.endCallFallbackTimer);
     clearNoPromptWatchdog(session);
     clearResponseWatchdog(session);
-    await upsertCallLog(session, session.reservationId ? "HOLD_CREATED" : session.requiredReview ? "ESCALATED" : "SUMMARIZED");
+    const finalCallLogState = buildFinalCallLogState(session);
+    await upsertCallLog(session, finalCallLogState.status, finalCallLogState.reviewNotes);
     session.openai?.close();
     if (session.callSid) activeSessions.delete(session.callSid);
   });
@@ -942,6 +944,8 @@ async function scriptedReplyFor(session, callerText) {
   }
   const firstVisitStateReply = handleFirstVisitStateReply(session, callerText, context);
   if (firstVisitStateReply) return firstVisitStateReply;
+  const courseSelectionReply = await handleCourseSelectionDuringBooking(session, callerText, context);
+  if (courseSelectionReply) return courseSelectionReply;
   const serviceKnowledgeReply = handleServiceKnowledgeQuestion(session, callerText, context);
   if (serviceKnowledgeReply) return serviceKnowledgeReply;
   const earlySuggestedAcceptanceReply = await handleSuggestedCandidateAcceptance(session, draft, context, text);
@@ -1555,7 +1559,10 @@ function isExplicitCourseOrPriceQuestion(text) {
 }
 
 function isCourseMentionInsideBookingRequest(text) {
-  return hasDateTimeCue(text) && /(\u4e88\u7d04|\u53d6\u308a\u305f\u3044|\u5165\u308c\u305f\u3044|\u304a\u9858\u3044|\u7a7a\u304d|\u5e0c\u671b|できます|可能)/u.test(text);
+  const normalized = normalizeJapaneseSpeech(text);
+  const bookingAction = /(\u4e88\u7d04|\u53d6\u308a\u305f\u3044|\u5165\u308c\u305f\u3044|\u304a\u9858\u3044|\u7a7a\u304d|\u5e0c\u671b|できます|可能)/u.test(normalized);
+  if (hasDateTimeCue(normalized) && bookingAction) return true;
+  return /(?:60|90|120)\s*\u5206(?:\u30b3\u30fc\u30b9)?(?:\u3067|\u306b)?(?:\u304a\u9858\u3044|\u304a\u9858\u3044\u3057\u307e\u3059|\u5e0c\u671b|\u53d6\u308a\u305f\u3044|\u5165\u308c\u305f\u3044)/u.test(normalized);
 }
 
 function handleFragmentedFollowUpQuestion(text, draft, context) {
@@ -2318,6 +2325,46 @@ function isCourseOrOptionContinuationText(text) {
   return /(?:60|90|120)分(?:コース)?(?:で|に|の)?(?:お願いします|お願い|いいですか|ください|どうしよう)/u.test(normalized);
 }
 
+async function handleCourseSelectionDuringBooking(session, callerText, context) {
+  const draft = session.reservationDraft ?? createReservationDraft();
+  const courses = context?.courses ?? draft.availableCourses ?? [];
+  const text = normalizeJapaneseSpeech(callerText);
+  const course = findMentionedCourse(text, courses);
+  if (!course || !shouldTreatCourseMentionAsSelection(draft, text)) return "";
+
+  session.reservationDraft = draft;
+  draft.availableCourses = courses;
+  draft.course = course;
+  draft.awaitingField = undefined;
+  draft.awaitingFinalConfirmation = false;
+
+  logConversationState(session, "course_selection_during_booking", {
+    user_utterance: callerText,
+    selected_course: course.name,
+    next_action: "continue_reservation_flow"
+  });
+
+  const nextQuestion = await reservationFlowReply(session, callerText, context);
+  if (!nextQuestion) return `${formatCourseNameForSpeech(course.name)}\u3067\u627f\u308a\u307e\u3059\u3002`;
+  if (nextQuestion.includes(formatCourseNameForSpeech(course.name)) || nextQuestion.includes(String(course.durationMin))) return nextQuestion;
+  return compactSpeechReply(`${formatCourseNameForSpeech(course.name)}\u3067\u627f\u308a\u307e\u3059\u3002${nextQuestion}`);
+}
+
+function shouldTreatCourseMentionAsSelection(draft, text) {
+  if (!draft || draft.completed || draft.cancelled) return false;
+  if (draft.course) return false;
+  if (isCourseInfoOnlyQuestion(text)) return false;
+  if (draft.awaitingField === "course") return true;
+  if (draft.startsAt && draft.customerName && draft.phone) return true;
+  return Boolean(hasAnyDraftValue(draft) && isCourseMentionInsideBookingRequest(text));
+}
+
+function isCourseInfoOnlyQuestion(text) {
+  const normalized = normalizeJapaneseSpeech(text);
+  return /(\u3044\u304f\u3089|\u6599\u91d1|\u5024\u6bb5|\u91d1\u984d|\u5185\u5bb9|\u7279\u5fb4|\u9055\u3044|\u8aac\u660e|\u3069\u3093\u306a|\u3069\u3046\u3044\u3046|\u4f55\u304c|\u306a\u306b\u304c|\u3042\u308a\u307e\u3059\u304b|\u3042\u308b\u3093\u3067\u3059\u304b|\uff1f|\?)/u.test(normalized) &&
+    !/(\u304a\u9858\u3044|\u5e0c\u671b|\u305d\u308c\u3067|\u305d\u308c\u306b|\u53d6\u308a\u305f\u3044|\u5165\u308c\u305f\u3044)/u.test(normalized);
+}
+
 function buildUnavailableStopReply(draft) {
   draft.awaitingField = "cancelled";
   draft.awaitingFinalConfirmation = false;
@@ -2917,6 +2964,7 @@ function shouldPrioritizeReservationState(draft, text) {
   if (["attention", "attentionConfirmed"].includes(draft.awaitingField) && isAttentionConfirmationText(text)) return true;
   if (draft.awaitingField === "firstVisit" && /(\u521d\u56de|\u521d\u3081\u3066|\u306f\u3058\u3081\u3066|2\u56de|\u4e8c\u56de|\u518d\u6765|\u6765\u305f\u3053\u3068|\u4f55\u56de|\u904e\u53bb|\u4ee5\u524d|\u5229\u7528\u7d4c\u9a13|\u5229\u7528\u6b74|\u4e88\u7d04\u3055\u305b|\u4e88\u7d04\u3057\u305f|\u3042\u308a\u307e\u3059)/u.test(text)) return true;
   if (draft.awaitingField === "phone" && normalizePhoneDigits(text)) return true;
+  if (draft.awaitingField === "course" && isCourseMentionInsideBookingRequest(text)) return true;
   return false;
 }
 
@@ -6175,6 +6223,9 @@ async function upsertCallLog(session, status, reviewNotes) {
   if (status === "ESCALATED") session.requiredReview = true;
   const transcript = [...session.transcript, ...session.assistantTranscript].join("\n");
   const aiSummary = transcript ? transcript.slice(-1800) : undefined;
+  const durationSeconds = Number.isFinite(session.connectedAt) && session.connectedAt > 0
+    ? Math.max(0, Math.round((Date.now() - session.connectedAt) / 1000))
+    : undefined;
   const data = {
     storePhoneSettingId: session.storePhoneSettingId,
     phoneNumber: session.from,
@@ -6184,6 +6235,7 @@ async function upsertCallLog(session, status, reviewNotes) {
     transcript: transcript || undefined,
     aiSummary,
     reviewNotes,
+    ...(durationSeconds !== undefined ? { durationSeconds } : {}),
     requiredReview: status === "ESCALATED" || session.requiredReview === true
   };
 
@@ -6214,6 +6266,36 @@ async function upsertCallLog(session, status, reviewNotes) {
       });
     })
     .catch((error) => console.warn("call log write failed:", error.message));
+}
+
+function buildFinalCallLogState(session) {
+  if (session.reservationId) return { status: "HOLD_CREATED", reviewNotes: undefined };
+  const incompleteReason = buildIncompletePhoneReservationReviewReason(session);
+  if (incompleteReason) {
+    session.requiredReview = true;
+    return { status: "ESCALATED", reviewNotes: incompleteReason };
+  }
+  if (session.requiredReview) return { status: "ESCALATED", reviewNotes: undefined };
+  return { status: "SUMMARIZED", reviewNotes: undefined };
+}
+
+function buildIncompletePhoneReservationReviewReason(session) {
+  const draft = session.reservationDraft;
+  if (!draft || draft.completed || draft.cancelled) return "";
+  if (!session.firstPromptReceived) return "";
+  if (!hasAnyDraftValue(draft)) return "";
+
+  const missing = [];
+  if (!draft.startsAt) missing.push("\u65e5\u6642");
+  if (!draft.customerName) missing.push("\u540d\u524d");
+  if (!draft.phone) missing.push("\u96fb\u8a71\u756a\u53f7");
+  if (!draft.course) missing.push("\u30b3\u30fc\u30b9");
+
+  const hasBookingCore = Boolean(draft.startsAt || draft.customerName || draft.phone || draft.course);
+  if (!hasBookingCore) return "";
+  if (!missing.length && draft.awaitingFinalConfirmation) return "\u6700\u7d42\u78ba\u8a8d\u524d\u306b\u901a\u8a71\u7d42\u4e86";
+  if (!missing.length) return "\u4e88\u7d04\u4f5c\u6210\u524d\u306b\u901a\u8a71\u7d42\u4e86";
+  return "\u4e88\u7d04\u672a\u5b8c\u4e86: " + missing.join("\u30fb") + "\u672a\u53d6\u5f97";
 }
 
 async function handleTwilioSmsStatus(request, response, url) {
