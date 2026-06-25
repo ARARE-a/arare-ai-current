@@ -4,7 +4,15 @@ loadEnv(".env.local");
 loadEnv(".env");
 
 const baseUrl = normalizeBaseUrl(process.argv[2] ?? process.env.ARARE_VERIFY_BASE_URL ?? currentProductionUrl());
-const authGatedPaths = new Set(["/api/setup/checklist", "/api/admin/state", "/api/platform/stores"]);
+const authGatedPaths = new Set([
+  "/api/setup/checklist",
+  "/api/admin/state",
+  "/api/platform/stores",
+  "/api/debug/store-context",
+  "/api/faq",
+  "/api/knowledge",
+  "/api/ng-answers"
+]);
 const automationGatedPaths = new Set(["/api/ai/extract", "/api/ai/reception"]);
 
 async function check(path, options) {
@@ -28,6 +36,10 @@ const checks = [
   () => check("/api/setup/checklist"),
   () => check("/api/admin/state"),
   () => check("/api/platform/stores"),
+  () => check("/api/debug/store-context"),
+  () => check("/api/faq"),
+  () => check("/api/knowledge"),
+  () => check("/api/ng-answers"),
   () => check("/api/twilio/sms/status"),
   () => check("/api/ai/extract", {
     method: "POST",
