@@ -1,5 +1,5 @@
 import { ConversationChannel, MessageRole } from "@prisma/client";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { fail, ok } from "@/lib/api";
 import { validateAutomationToken } from "@/lib/automation-auth";
@@ -13,7 +13,7 @@ import {
   serializeReservationDraft,
   workflowStateForAction
 } from "@/lib/reservation-draft";
-import { getRequestStoreContext } from "@/lib/store-access";
+import { getRequestStoreContext, type RequestStoreContext } from "@/lib/store-access";
 
 const schema = z.object({
   storeId: z.string().optional(),
@@ -45,8 +45,9 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const automationAuthError = validateAutomationToken(request);
-    if (automationAuthError) return automationAuthError;
+    const access = await resolveReceptionAccess(request);
+    if (access.response) return access.response;
+
     const rateLimitError = await rateLimit(request, {
       name: "ai-reception",
       rules: [
@@ -57,7 +58,11 @@ export async function POST(request: NextRequest) {
     if (rateLimitError) return rateLimitError;
 
     const payload = schema.parse(await request.json());
-    const requestStore = payload.storeId ?? (await getRequestStoreContext())?.storeId;
+    if (access.context?.storeId && payload.storeId && payload.storeId !== access.context.storeId) {
+      return NextResponse.json({ error: "store access mismatch" }, { status: 403 });
+    }
+
+    const requestStore = access.context?.storeId ?? payload.storeId ?? (await getRequestStoreContext())?.storeId;
     if (!requestStore) {
       throw new Error("storeId is required for AI reception.");
     }
@@ -146,6 +151,24 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return fail(error);
   }
+}
+
+async function resolveReceptionAccess(request: NextRequest): Promise<{
+  context?: RequestStoreContext;
+  response?: NextResponse;
+}> {
+  const context = await getRequestStoreContext();
+
+  if (context?.authenticated) {
+    return { context };
+  }
+
+  const automationAuthError = validateAutomationToken(request);
+  if (automationAuthError) {
+    return { response: automationAuthError };
+  }
+
+  return context ? { context } : {};
 }
 
 function buildExtractionText(priorMessages: Array<{ role: MessageRole; content: string }>, currentText: string) {
