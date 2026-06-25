@@ -2676,6 +2676,8 @@ function buildRegisteredBodyworkReply(match, draft, context, courseLine, next) {
 }
 
 function handleServiceKnowledgeQuestion(session, callerText, context) {
+  const text = normalizeJapaneseSpeech(callerText);
+  if (isCourseMentionInsideBookingRequest(text)) return "";
   const match = classifyServiceKnowledge(callerText);
   if (!match) return "";
   const draft = session.reservationDraft ?? createReservationDraft();
