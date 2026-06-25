@@ -114,19 +114,46 @@ async function setup() {
 }
 
 async function simulateInboundCall(to, callSid) {
-  const response = await fetch(`${baseUrl}/api/twilio/voice`, {
+  const form = new URLSearchParams({
+    From: "+819012345678",
+    To: to,
+    CallSid: callSid
+  });
+  const initial = await postTwilioForm(`${baseUrl}/api/twilio/voice`, form);
+  assert(initial.response.ok, `Twilio voice webhook failed: ${initial.response.status} ${initial.text}`);
+  assert(initial.text.includes("<Response>"), `Twilio voice webhook did not return TwiML: ${initial.text}`);
+
+  const redirectUrl = extractTwimlRedirectUrl(initial.text);
+  if (!redirectUrl) return initial.text;
+
+  const redirected = await postTwilioForm(redirectUrl, form);
+  assert(redirected.response.ok, `Twilio redirected voice webhook failed: ${redirected.response.status} ${redirected.text}`);
+  assert(redirected.text.includes("<Response>"), `Redirected Twilio voice webhook did not return TwiML: ${redirected.text}`);
+  return redirected.text;
+}
+
+async function postTwilioForm(url, form) {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      From: "+819012345678",
-      To: to,
-      CallSid: callSid
-    })
+    body: form
   });
   const text = await response.text();
-  assert(response.ok, `Twilio voice webhook failed: ${response.status} ${text}`);
-  assert(text.includes("<Response>"), `Twilio voice webhook did not return TwiML: ${text}`);
-  return text;
+  return { response, text };
+}
+
+function extractTwimlRedirectUrl(xml) {
+  const match = String(xml).match(/<Redirect\b[^>]*>([^<]+)<\/Redirect>/i);
+  return match ? decodeXml(match[1].trim()) : null;
+}
+
+function decodeXml(value) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
 }
 
 async function cleanup() {

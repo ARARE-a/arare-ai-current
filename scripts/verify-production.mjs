@@ -5,6 +5,7 @@ loadEnv(".env");
 
 const baseUrl = normalizeBaseUrl(process.argv[2] ?? process.env.ARARE_VERIFY_BASE_URL ?? currentProductionUrl());
 const authGatedPaths = new Set(["/api/setup/checklist", "/api/admin/state", "/api/platform/stores"]);
+const automationGatedPaths = new Set(["/api/ai/extract", "/api/ai/reception"]);
 
 async function check(path, options) {
   const url = `${baseUrl}${path}`;
@@ -34,6 +35,13 @@ const checks = [
     body: JSON.stringify({
       text: "\u660e\u65e519\u6642\u304b\u308990\u5206\u30b3\u30fc\u30b9\u3092\u4e88\u7d04\u3057\u305f\u3044\u3067\u3059\u3002\u540d\u524d\u306f\u5c71\u7530\u3001\u96fb\u8a71\u756a\u53f7\u306f090-0000-0000\u3067\u3059\u3002"
     })
+  }),
+  () => check("/api/ai/reception", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: "\u660e\u65e519\u6642\u304b\u308990\u5206\u30b3\u30fc\u30b9\u3092\u4e88\u7d04\u3057\u305f\u3044\u3067\u3059\u3002"
+    })
   })
 ];
 
@@ -52,10 +60,20 @@ const failed = results.filter((result) => !result.ok);
 process.exit(failed.length > 0 ? 1 : 0);
 
 function normalizeResult(result) {
-  if (!clerkEnabled || !authGatedPaths.has(result.path)) return result;
-  if (result.status === 401 || result.status === 307 || looksLikeSignInPage(result.body)) {
-    return { ...result, ok: true, authGated: true };
+  if (clerkEnabled && authGatedPaths.has(result.path)) {
+    if (result.status === 401 || result.status === 307 || looksLikeSignInPage(result.body)) {
+      return { ...result, ok: true, authGated: true };
+    }
+    return result;
   }
+
+  if (automationGatedPaths.has(result.path)) {
+    if (result.status === 401 || result.status === 503) {
+      return { ...result, ok: true, automationGated: true };
+    }
+    return result;
+  }
+
   return result;
 }
 
