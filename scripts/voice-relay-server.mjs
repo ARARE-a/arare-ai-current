@@ -1550,6 +1550,7 @@ function isCourseQuestion(text) {
 }
 
 function isExplicitCourseOrPriceQuestion(text) {
+  if (isCurrentReservationSummaryQuestion(text)) return false;
   return /(\u30b3\u30fc\u30b9|\u6599\u91d1|\u30e1\u30cb\u30e5\u30fc|\u3044\u304f\u3089|\u5024\u6bb5|\u91d1\u984d|\u7a2e\u985e|\u5185\u5bb9|\u7279\u5fb4|\u9055\u3044|\u30b5\u30fc\u30d3\u30b9|\u30aa\u30d7\u30b7\u30e7\u30f3|\u8aac\u660e)/u.test(text);
 }
 
