@@ -10,6 +10,7 @@ const timeoutMs = Number(process.env.VERIFY_VOICE_RELAY_TIMEOUT_MS ?? 30000);
 const received = [];
 let promptStartIndex = 0;
 let promptSent = false;
+const verificationPrompt = "明日の21時から90分で空いてますか？";
 
 try {
   const result = await verifyRelay();
@@ -65,22 +66,18 @@ function verifyRelay() {
       );
 
       setTimeout(() => {
-        promptStartIndex = received.length;
-        promptSent = true;
-        ws.send(
-          JSON.stringify({
-            type: "prompt",
-            voicePrompt: "明日の21時から90分で空いてますか？",
-            lang: "ja-JP",
-            last: true
-          })
-        );
-      }, 500);
+        sendPromptIfNeeded(ws);
+      }, 3000);
     });
 
     ws.on("message", (raw) => {
       const message = JSON.parse(raw.toString());
       received.push(message);
+
+      if (!promptSent && message.type === "text" && message.last === true) {
+        sendPromptIfNeeded(ws);
+        return;
+      }
 
       const aiTextMessages = received.slice(promptStartIndex).filter(
         (item) => promptSent && item.type === "text" && String(item.token ?? "").trim().length > 0
@@ -110,6 +107,20 @@ function verifyRelay() {
     ws.on("error", (error) => {
       finish(false, error);
     });
+
+    function sendPromptIfNeeded(socket) {
+      if (promptSent || settled) return;
+      promptStartIndex = received.length;
+      promptSent = true;
+      socket.send(
+        JSON.stringify({
+          type: "prompt",
+          voicePrompt: verificationPrompt,
+          lang: "ja-JP",
+          last: true
+        })
+      );
+    }
   });
 }
 
