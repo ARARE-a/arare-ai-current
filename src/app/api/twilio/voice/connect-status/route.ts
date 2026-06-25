@@ -19,17 +19,54 @@ export async function POST(request: NextRequest) {
     .filter(Boolean)
     .join("\n");
 
-  await prisma.callLog
-    .updateMany({
+  const existingCallLog = await prisma.callLog
+    .findFirst({
       where: { twilioCallSid: callSid },
-      data: {
-        status: handoffData ? "ESCALATED" : "SUMMARIZED",
-        durationSeconds: durationSeconds ?? undefined,
-        reviewNotes: reviewNotes || undefined,
-        requiredReview: Boolean(handoffData)
+      select: {
+        id: true,
+        status: true,
+        reservationId: true,
+        requiredReview: true,
+        reviewNotes: true
       }
     })
-    .catch(() => ({ count: 0 }));
+    .catch(() => null);
+
+  const nextRequiredReview = Boolean(handoffData) || Boolean(existingCallLog?.requiredReview);
+  const nextStatus = handoffData
+    ? "ESCALATED"
+    : existingCallLog?.reservationId
+      ? "HOLD_CREATED"
+      : nextRequiredReview
+        ? "ESCALATED"
+        : "SUMMARIZED";
+  const nextReviewNotes = mergeReviewNotes(existingCallLog?.reviewNotes, reviewNotes);
+
+  if (existingCallLog) {
+    await prisma.callLog
+      .update({
+        where: { id: existingCallLog.id },
+        data: {
+          status: nextStatus,
+          durationSeconds: durationSeconds ?? undefined,
+          reviewNotes: nextReviewNotes || undefined,
+          requiredReview: nextRequiredReview
+        }
+      })
+      .catch(() => null);
+  } else {
+    await prisma.callLog
+      .updateMany({
+        where: { twilioCallSid: callSid },
+        data: {
+          status: nextStatus,
+          durationSeconds: durationSeconds ?? undefined,
+          reviewNotes: nextReviewNotes || undefined,
+          requiredReview: nextRequiredReview
+        }
+      })
+      .catch(() => ({ count: 0 }));
+  }
 
   await recordUsageMeter(callSid, durationSeconds);
 
@@ -52,6 +89,13 @@ function parseDurationSeconds(value?: string | null) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
   return Math.round(parsed);
+}
+
+function mergeReviewNotes(existing?: string | null, incoming?: string | null) {
+  const parts = [existing, incoming]
+    .map((item) => item?.trim())
+    .filter((item): item is string => Boolean(item));
+  return [...new Set(parts)].join("\n");
 }
 
 async function recordUsageMeter(callSid: string, durationSeconds?: number) {

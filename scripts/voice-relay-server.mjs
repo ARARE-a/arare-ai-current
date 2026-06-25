@@ -828,16 +828,52 @@ async function handleTwilioConnectStatus(request, response) {
       .filter(Boolean)
       .join("\n");
 
-    await prisma.callLog
-      .updateMany({
+    const existingCallLog = await prisma.callLog
+      .findFirst({
         where: { twilioCallSid: callSid },
-        data: {
-          status: handoffData ? "ESCALATED" : "SUMMARIZED",
-          reviewNotes: reviewNotes || undefined,
-          requiredReview: Boolean(handoffData)
+        select: {
+          id: true,
+          status: true,
+          reservationId: true,
+          requiredReview: true,
+          reviewNotes: true
         }
       })
       .catch(() => null);
+
+    const nextRequiredReview = Boolean(handoffData) || Boolean(existingCallLog?.requiredReview);
+    const nextStatus = handoffData
+      ? "ESCALATED"
+      : existingCallLog?.reservationId
+        ? "HOLD_CREATED"
+        : nextRequiredReview
+          ? "ESCALATED"
+          : "SUMMARIZED";
+    const nextReviewNotes = mergeReviewNotes(existingCallLog?.reviewNotes, reviewNotes);
+
+    if (existingCallLog) {
+      await prisma.callLog
+        .update({
+          where: { id: existingCallLog.id },
+          data: {
+            status: nextStatus,
+            reviewNotes: nextReviewNotes || undefined,
+            requiredReview: nextRequiredReview
+          }
+        })
+        .catch(() => null);
+    } else {
+      await prisma.callLog
+        .updateMany({
+          where: { twilioCallSid: callSid },
+          data: {
+            status: nextStatus,
+            reviewNotes: nextReviewNotes || undefined,
+            requiredReview: nextRequiredReview
+          }
+        })
+        .catch(() => null);
+    }
   }
 
   if (handoffData) {
@@ -854,6 +890,14 @@ async function handleTwilioConnectStatus(request, response) {
 
   return writeXml(response, ['<?xml version="1.0" encoding="UTF-8"?>', "<Response/>"].join("\n"));
 }
+
+function mergeReviewNotes(existing, incoming) {
+  const parts = [existing, incoming]
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+  return [...new Set(parts)].join("\n");
+}
+
 async function sendScriptedReply(session, twilioSocket, reply) {
   const text = String(reply ?? "").trim();
   if (!text) return;
@@ -944,10 +988,14 @@ async function scriptedReplyFor(session, callerText) {
   }
   const firstVisitStateReply = handleFirstVisitStateReply(session, callerText, context);
   if (firstVisitStateReply) return firstVisitStateReply;
+  const earlyPhoneMismatchReply = handlePhoneMismatchConfirmation(session, callerText);
+  if (earlyPhoneMismatchReply) return earlyPhoneMismatchReply;
   const courseSelectionReply = await handleCourseSelectionDuringBooking(session, callerText, context);
   if (courseSelectionReply) return courseSelectionReply;
   const serviceKnowledgeReply = handleServiceKnowledgeQuestion(session, callerText, context);
   if (serviceKnowledgeReply) return serviceKnowledgeReply;
+  const suggestedTimeOverrideReply = await handleSuggestedCandidateDateTimeOverride(session, draft, context, callerText);
+  if (suggestedTimeOverrideReply) return suggestedTimeOverrideReply;
   const earlySuggestedAcceptanceReply = await handleSuggestedCandidateAcceptance(session, draft, context, text);
   if (earlySuggestedAcceptanceReply) return earlySuggestedAcceptanceReply;
   if (isExplicitCourseOrPriceQuestion(text) && !isCourseMentionInsideBookingRequest(text)) {
@@ -1508,6 +1556,58 @@ function buildCandidateOfferInstruction(draft, mode = "time") {
   return "\u9032\u3081\u308b\u5834\u5408\u306f\u300c\u304a\u9858\u3044\u3057\u307e\u3059\u300d\u3001\u5225\u306a\u3089\u300c\u5225\u306e\u5019\u88dc\u300d\u3068\u304a\u4f1d\u3048\u304f\u3060\u3055\u3044\u3002";
 }
 
+async function handleSuggestedCandidateDateTimeOverride(session, draft, context, callerText) {
+  if (!draft?.suggestedStartsAt) return "";
+  const text = normalizeDateTimeDigits(normalizeJapaneseSpeech(callerText));
+  if (!isCandidateDateTimeOverrideText(text, draft, context)) return "";
+
+  session.reservationDraft = draft;
+  inheritSuggestedCandidateDateForTimeOnlyText(draft, text);
+  applyRequestedDateTimeState(draft, callerText, context?.store);
+  clearSuggestedCandidate(draft);
+  draft.availabilityCheckResult = undefined;
+  draft.awaitingFinalConfirmation = false;
+
+  logConversationState(session, "suggested_candidate_datetime_override", {
+    user_utterance: callerText,
+    requested_datetime: draft.requested_datetime ?? null,
+    next_action: "check_user_requested_datetime"
+  });
+
+  const reply = await reservationFlowReply(session, callerText, context);
+  if (reply && draft.startsAt && shouldPrefixAcceptedDateTime(reply) && !reply.includes(formatDateTimeJa(draft.startsAt))) {
+    return `${formatDateTimeJa(draft.startsAt)}\u3067\u78ba\u8a8d\u3067\u304d\u307e\u3057\u305f\u3002${reply}`;
+  }
+  return reply || "\u627f\u77e5\u3057\u307e\u3057\u305f\u3002\u305d\u306e\u304a\u6642\u9593\u3067\u7a7a\u304d\u3092\u78ba\u8a8d\u3057\u307e\u3059\u3002";
+}
+
+function shouldPrefixAcceptedDateTime(reply) {
+  return /(\u304a\u540d\u524d|\u96fb\u8a71\u756a\u53f7|\u30b3\u30fc\u30b9|\u521d\u3081\u3066|\u4ee5\u524d|\u6ce8\u610f\u4e8b\u9805|\u78ba\u8a8d\u3057\u307e\u3059)/u.test(String(reply ?? ""));
+}
+
+function isCandidateDateTimeOverrideText(text, draft, context) {
+  const normalized = normalizeDateTimeDigits(normalizeJapaneseSpeech(text)).replace(/\s+/g, "");
+  if (!normalized || !hasDateTimeCue(normalized)) return false;
+  if (isSuggestedCandidateExactTimeAcceptance(normalized, draft, context)) return false;
+  if (/(その時間|この時間|その候補|この候補|それ|そちら).*(お願い|お願いします|大丈夫|取って|予約|進め)/u.test(normalized)) return false;
+  const hasAction = /(\u304a\u9858\u3044|\u4e88\u7d04|\u53d6\u308a|\u5165\u308c|\u5e0c\u671b|\u305d\u3046\u3067\u3059\u306d|\u3058\u3083\u3042|\u3067)/u.test(normalized);
+  const hasExplicitClock = /(\d{1,2}\s*(?:\u6642|:)|\u6642\u534a|\d{1,2}\s*\u5206)/u.test(normalized);
+  return hasAction && hasExplicitClock;
+}
+
+function inheritSuggestedCandidateDateForTimeOnlyText(draft, text) {
+  if (!draft?.suggestedStartsAt) return;
+  if (parseRequestedDateParts(text)) return;
+  const parsedTime = parseRequestedTimeParts(text);
+  if (!parsedTime || parsedTime.confidence < TIME_CONFIDENCE_THRESHOLD) return;
+  const dateParts = getJstDatePartsFromDate(draft.suggestedStartsAt);
+  const iso = formatJstDateIso(dateParts);
+  draft.requested_date = iso;
+  draft.last_requested_date = iso;
+  draft.date_source = "suggested_candidate_date_inherited";
+  draft.date_confidence = 0.95;
+}
+
 async function handleSuggestedCandidateAcceptance(session, draft, context, text) {
   if (!draft?.suggestedStartsAt) return "";
   const acceptsSuggestedCandidate =
@@ -1768,7 +1868,7 @@ function handlePhoneMismatchConfirmation(session, callerText) {
     return draft.phoneMismatchConfirmation ? buildPhoneMismatchQuestion(draft) : continueAfterPhoneConfirmed(draft);
   }
 
-  if (isAffirmative(text) || /(\u4eca\u304b\u3051|\u304b\u3051\u3066|\u767a\u4fe1|\u3053\u306e\u756a\u53f7|\u7740\u4fe1|\u81ea\u5206\u306e\u756a\u53f7)/u.test(text)) {
+  if (isPhoneMismatchCallerNumberAffirmative(text) || /(\u4eca\u304b\u3051|\u304b\u3051\u3066|\u767a\u4fe1|\u3053\u306e\u756a\u53f7|\u7740\u4fe1|\u81ea\u5206\u306e\u756a\u53f7)/u.test(text)) {
     clearPhoneMismatch(draft, mismatch.callerPhone);
     return continueAfterPhoneConfirmed(draft);
   }
@@ -1787,6 +1887,13 @@ function handlePhoneMismatchConfirmation(session, callerText) {
   }
 
   return buildPhoneMismatchQuestion(draft);
+}
+
+function isPhoneMismatchCallerNumberAffirmative(text) {
+  const normalized = normalizeJapaneseSpeech(text).replace(/\s+/g, "");
+  if (!normalized) return false;
+  if (isCourseQuestion(normalized) || hasDateTimeCue(normalized)) return false;
+  return /^(?:はい|うん|ええ|大丈夫|大丈夫です|それで|それで大丈夫|それでお願いします|お願いします|お願い|OK|オーケー)$/iu.test(normalized);
 }
 
 function mergePhoneDigits(left, right) {
@@ -2330,6 +2437,13 @@ async function handleCourseSelectionDuringBooking(session, callerText, context) 
   const courses = context?.courses ?? draft.availableCourses ?? [];
   const text = normalizeJapaneseSpeech(callerText);
   const course = findMentionedCourse(text, courses);
+  if (!course && shouldAskConciseCourseChoice(draft, text)) {
+    session.reservationDraft = draft;
+    draft.availableCourses = courses;
+    draft.awaitingField = "course";
+    draft.awaitingFinalConfirmation = false;
+    return buildCourseChoiceQuestion(courses);
+  }
   if (!course || !shouldTreatCourseMentionAsSelection(draft, text)) return "";
 
   session.reservationDraft = draft;
@@ -2357,6 +2471,15 @@ function shouldTreatCourseMentionAsSelection(draft, text) {
   if (draft.awaitingField === "course") return true;
   if (draft.startsAt && draft.customerName && draft.phone) return true;
   return Boolean(hasAnyDraftValue(draft) && isCourseMentionInsideBookingRequest(text));
+}
+
+function shouldAskConciseCourseChoice(draft, text) {
+  if (!draft || draft.completed || draft.cancelled || draft.course) return false;
+  if (draft.awaitingField !== "course") return false;
+  const normalized = normalizeJapaneseSpeech(text).replace(/\s+/g, "");
+  if (!normalized) return false;
+  if (isCourseInfoOnlyQuestion(normalized)) return false;
+  return /(\u30b3\u30fc\u30b9|\u5206|\u304a\u9858\u3044|\u304a\u9858\u3044\u3057\u307e\u3059|\u305d\u308c\u3067|\u666e\u901a|\u30b9\u30bf\u30f3\u30c0\u30fc\u30c9|\u304a\u307e\u304b\u305b)/u.test(normalized);
 }
 
 function isCourseInfoOnlyQuestion(text) {
@@ -2545,7 +2668,11 @@ function isNoNominationText(text) {
 }
 
 function buildCourseInfoReply(draft, courses) {
-  const menu = formatCourseMenu(courses ?? draft?.availableCourses ?? []);
+  const availableCourses = courses ?? draft?.availableCourses ?? [];
+  if (draft && !draft.course && (draft.awaitingField === "course" || hasAnyDraftValue(draft))) {
+    return buildCourseChoiceQuestion(availableCourses);
+  }
+  const menu = formatCourseMenu(availableCourses);
   if (draft?.suggestedStartsAt) {
     const startsAt = new Date(draft.suggestedStartsAt);
     const therapist = draft.suggestedTherapistName ? draft.suggestedTherapistName + "\u3055\u3093" : "\u62c5\u5f53\u5019\u88dc";
@@ -4027,6 +4154,18 @@ function formatCourseMenu(courses) {
   return formatCourseMenuBrief(courses) + "\u3054\u4e88\u7d04\u3067\u3057\u305f\u3089\u3001\u3054\u5e0c\u671b\u306e\u65e5\u6642\u3092\u304a\u4f1d\u3048\u304f\u3060\u3055\u3044\u3002";
 }
 
+function buildCourseChoiceQuestion(courses) {
+  const activeCourses = Array.isArray(courses) ? courses.filter(Boolean) : [];
+  if (!activeCourses.length) {
+    return "\u30b3\u30fc\u30b9\u60c5\u5831\u3092\u78ba\u8a8d\u4e2d\u3067\u3059\u3002\u3054\u5e0c\u671b\u306e\u5206\u6570\u3092\u304a\u9858\u3044\u3057\u307e\u3059\u3002";
+  }
+  const labels = activeCourses
+    .slice(0, 3)
+    .map((course) => `${course.durationMin}\u5206`)
+    .join("\u3001");
+  return `\u627f\u77e5\u3057\u307e\u3057\u305f\u3002\u30b3\u30fc\u30b9\u306f${labels}\u304b\u3089\u9078\u3079\u307e\u3059\u3002\u4f55\u5206\u306b\u3055\u308c\u307e\u3059\u304b\uff1f`;
+}
+
 function formatCourseMenuBrief(courses) {
   if (!courses.length) {
     return "\u30b3\u30fc\u30b9\u60c5\u5831\u3092\u78ba\u8a8d\u4e2d\u3067\u3059\u3002\u3054\u5e0c\u671b\u306e\u5206\u6570\u304c\u3042\u308c\u3070\u5148\u306b\u304a\u4f1d\u3048\u304f\u3060\u3055\u3044\u3002";
@@ -4474,7 +4613,7 @@ async function reservationFlowReply(session, callerText, context) {
   }
   if (!draft.course) {
     draft.awaitingField = "course";
-    return formatCourseMenu(courses) + "\u3054\u5e0c\u671b\u306f\u3069\u3061\u3089\u3067\u3059\u304b\uff1f";
+    return buildCourseChoiceQuestion(courses);
   }
   if (draft.firstVisit === undefined) {
     draft.awaitingField = "firstVisit";
@@ -5885,6 +6024,14 @@ async function finalizeAssistantResponse(session, twilioSocket, fallbackText) {
 
   if (!normalized || normalized === session.lastAssistantText) {
     if (session.sentAssistantText) sendTwilioText(twilioSocket, " ", true);
+    else {
+      const fallbackReply = buildNoResponseFallbackReply(session, session.lastUserUtterance ?? "");
+      session.lastAssistantText = fallbackReply;
+      session.assistantTranscript.push(`AI: ${fallbackReply}`);
+      await appendPhoneConversationMessage(session, "AI", fallbackReply);
+      sendTwilioText(twilioSocket, fallbackReply, true);
+      await upsertCallLog(session, "TRANSCRIBED", "openai empty or duplicate response fallback");
+    }
     session.sentAssistantText = false;
     await flushQueuedCallerText(session, twilioSocket);
     return;
