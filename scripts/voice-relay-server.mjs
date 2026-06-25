@@ -1224,6 +1224,10 @@ async function applyCsvConversationGuards(session, callerText, context) {
     });
   }
 
+  if (shouldLetDateTimeFlowHandle(text, context?.store, category)) {
+    return "";
+  }
+
   if (isOtherTherapistCandidateRequest(text) && (draft.suggestedStartsAt || draft.startsAt)) {
     return await buildOtherTherapistCandidateReply(session, context, draft);
   }
@@ -1260,6 +1264,16 @@ async function applyCsvConversationGuards(session, callerText, context) {
   }
 
   return "";
+}
+
+function shouldLetDateTimeFlowHandle(text, store, category) {
+  if (!category) return false;
+  const recoveryCategories = new Set(["reservation_intent", "mid_correction", "hesitation", "casual_ack", "complaint_light"]);
+  if (!recoveryCategories.has(category)) return false;
+  const normalized = normalizeDateTimeDigits(normalizeJapaneseSpeech(text));
+  const hasDateOrTime = Boolean(parseRequestedDateParts(normalized) || parseRequestedTimeParts(normalized, store));
+  if (!hasDateOrTime) return false;
+  return /(\u4e88\u7d04|\u53d6\u308a\u305f\u3044|\u5165\u308c\u305f\u3044|\u304a\u9858\u3044|\u7a7a\u304d|\u5e0c\u671b|\u30b3\u30fc\u30b9|\u5206)/u.test(normalized);
 }
 
 function buildCurrentCandidateReply(draft) {
@@ -4098,7 +4112,7 @@ function updateReservationDraft(session, callerText, context) {
   });
 
   const course = findMentionedCourse(text, courses);
-  if (course && canCollectCustomerInfo(draft) && draft.awaitingField === "course") draft.course = course;
+  if (course && (draft.awaitingField === "course" || draft.startsAt || isReservationLikely(text))) draft.course = course;
 
   const nomination = extractNomination(callerText, therapists);
   if (nomination.found) {
