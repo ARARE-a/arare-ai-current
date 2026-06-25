@@ -1,0 +1,58 @@
+{
+  "name": "arare-ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:lan": "next dev --hostname 0.0.0.0 --port 3001",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:seed:clean-demo": "node scripts/bootstrap-clean-demo-store.mjs",
+    "db:demo-ready": "node scripts/ensure-demo-store-ready.mjs",
+    "verify:production": "node scripts/verify-production.mjs",
+    "verify:phone-routing": "node scripts/verify-phone-routing.mjs",
+    "verify:production-parity": "node scripts/verify-production-parity.mjs",
+    "verify:one-day": "node scripts/verify-one-day-readiness.mjs",
+    "verify:voice-relay": "node scripts/verify-voice-relay.mjs",
+    "verify:phone-ai-regression": "node scripts/verify-phone-ai-regression-1000.mjs",
+    "generate:conversation-quality": "node scripts/generate-conversation-quality-cases.mjs",
+    "verify:conversation-quality": "node scripts/verify-final.mjs",
+    "voice:relay": "node scripts/voice-relay-server.mjs",
+    "verify:final": "node scripts/verify-final.mjs"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^7.4.2",
+    "@prisma/client": "^6.8.2",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.511.0",
+    "next": "^15.3.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "ws": "^8.21.0",
+    "zod": "^3.25.49"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.24",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "@types/ws": "^8.18.1",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.27.0",
+    "eslint-config-next": "^15.3.3",
+    "postcss": "^8.5.3",
+    "prisma": "^6.8.2",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  }
+}

@@ -1,0 +1,1004 @@
+category,utterance,expected_action,forbidden_action,priority
+"relative_date_context",明日空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明日空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あした空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あしたとか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あしたいけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あしたっていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あした誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あした予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あした空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あしたお願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あした行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あした取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あしたフリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あした空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",明後日空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさって空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさってとか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさっていけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさってっていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさって誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさって予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさって空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさってお願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさって行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさって取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさってフリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",あさって空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",2日後空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",二日後空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",3日後空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",三日後空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",4日後空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週金曜空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来週の金曜空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週金曜空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",今週の金曜空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",再来週空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月行けますかね？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月取れますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月フリーいけます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",来月空きある？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",月末空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",月末とか空いてますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",月末いけますか？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",月末っていける？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",月末誰かいます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",月末予約できます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",月末空いてる人います？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"relative_date_context",月末お願いできます？,"requested_dateを現在日時基準で更新する","前回requested_dateを保持したままにしない",95
+"time_ambiguity_guard",8時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",11時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜8時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜9時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",夜10時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝8時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝9時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",朝10時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",昼10時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",22時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",21時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",20時で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらい予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらい空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいいけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいでお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいとかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいなら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいって夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいって朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時ぐらいで取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とか予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とか空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかいけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかでお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかとかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかなら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかって夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかって朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",9時とかで取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とか予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とか空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかいけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかでお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかとかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかなら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかって夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかって朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",8時とかで取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらい予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらい空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらいいけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらいでお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらいとかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらいぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらいなら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらいって夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらいって朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時くらいで取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後いけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後でお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後とかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後ぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後なら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後って夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後って朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時前後で取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時から予約してもいいですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時から空いてますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時からいけますか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時からでお願いできます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時からとかどうですか？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時からぐらいで,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時からなら行ける,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時からって夜の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時からって朝の方です,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"time_ambiguity_guard",10時からで取れます？,"time_confidenceが0.85未満なら確認質問へ進む",確認なしで10時を22時へ変換しない,95
+"availability_search_question",空いてる日教えて,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えて教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えてありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えてとかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えてお願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えてでお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えて見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えて確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる日教えて知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",いつ空いてる？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる人いますか？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",誰か空いてる？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短いつ？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空いてる枠ある？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",その日空いてる人は？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",予約できる日ありますか？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空きの日あります？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",どの日ならいける？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",何時なら空いてる？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",今日以外で空きある？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",他に空きある？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",別の日なら？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出してください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出して教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出してありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出してとかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出してお願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出してでお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出して見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出して確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",空き候補出して知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えて,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えて教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えてありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えてとかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えてお願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えてでお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えて見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えて確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",候補教えて知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えて,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えて教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えてありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えてとかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えてお願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えてでお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えて見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えて確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",入れる日教えて知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",行ける日あります？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？ください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？ありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？とかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？お願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？でお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",一番早いのいつ？知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰か,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰かください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰か教えてください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰かありますか？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰かとかあります？,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰かお願い,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰かでお願いします,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰か見てください,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰か確認して,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"availability_search_question",最短で誰か知りたいです,"availability_search_mode=trueにして候補探索へ進む",同じ満枠返答を繰り返さない,98
+"therapist_false_positive",空いてる人かないですか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですか？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですかお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですかです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですかなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですかとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですかって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですかで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですかかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人かないですかかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですか？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですかお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですかです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですかなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですかとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですかって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですかで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですかかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人いないですかかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですか？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですかお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですかです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですかなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですかとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですかって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですかで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですかかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かいないですかかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますか？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますかお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますかです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますかなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますかとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますかって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますかで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますかかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",かなり空いてますかかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃ？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",そこじゃかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？お願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？です,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？なんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？とか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？って感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？で,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？かな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",他ない？かね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？お願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？です,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？なんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？とか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？って感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？で,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？かな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空きない？かね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいい,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいい？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいいお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいいです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいいなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいいとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいいって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいいで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいいかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもいいかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいい,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいい？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいいお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいいです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいいなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいいとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいいって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいいで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいいかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーでいいかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしで？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしでお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしでです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしでなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしでとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしでって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしでで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしでかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしでかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫お願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫です,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫なんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫とか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫って感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫で,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫かな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",フリーで大丈夫かね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫お願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫です,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫なんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫とか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫って感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫で,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫かな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも大丈夫かね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよ？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもええよかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なし,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なし？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名なしかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせで？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせでお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせでです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせでなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせでとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせでって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせでで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせでかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",おまかせでかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいい,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいい？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいいお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいいです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいいなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいいとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいいって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいいで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいいかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰かでいいかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子で,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子で？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子でお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子でです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子でなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子でとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子でって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子でで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子でかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる子でかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人で,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人で？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人でお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人でです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人でなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人でとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人でって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人でで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人でかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",空いてる人でかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でも？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",誰でもかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらない,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらない？,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらないお願いします,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらないです,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらないなんですけど,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらないとか,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらないって感じ,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらないで,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらないかな,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"therapist_false_positive",指名はいらないかね,"therapist_match_confidenceが0.9未満ならselected_therapist保存禁止","かない/かなり/誰でもをkana等へ部分一致保存しない",96
+"repeat_response_guard",さっきの時間は？,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの時間は？ 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",また同じですか？ 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",じゃあその時間は？ 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",そこしかない？ 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",他は？ 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回確認して 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",同じやつ？ 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",さっきの満枠？ 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",その枠もう無理？ 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 1,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 2,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 3,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 4,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 5,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 6,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 7,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 8,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"repeat_response_guard",もう一回言って 9,"同一requested_datetimeへの同一返答は最大1回にする",同じ満枠文面を3回以上返さない,94
+"confirmation_required",12日の11時ですか？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",12日の11時ですか？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",12日の11時ですか？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",12日の11時ですか？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",12日の11時ですか？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",20時で大丈夫ですか？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",20時で大丈夫ですか？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",20時で大丈夫ですか？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",20時で大丈夫ですか？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",20時で大丈夫ですか？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",その時間空いてます？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",その時間空いてます？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",その時間空いてます？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",その時間空いてます？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",その時間空いてます？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",名前って僕の名前？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",名前って僕の名前？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",名前って僕の名前？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",名前って僕の名前？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",名前って僕の名前？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",指名の名前ですか？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",指名の名前ですか？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",指名の名前ですか？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",指名の名前ですか？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",指名の名前ですか？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",え、何時？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",え、何時？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",え、何時？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",え、何時？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",え、何時？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",今の聞こえました？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",今の聞こえました？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",今の聞こえました？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",今の聞こえました？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",今の聞こえました？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",それでいいんですか？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",それでいいんですか？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",それでいいんですか？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",それでいいんですか？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",それでいいんですか？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",あーそのへん,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",あーそのへん 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",あーそのへん 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",あーそのへん 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",あーそのへん 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",夜で,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",夜で 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",夜で 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",夜で 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",夜で 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",昼で,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",昼で 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",昼で 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",昼で 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",昼で 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",仕事終わり,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",仕事終わり 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",仕事終わり 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",仕事終わり 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",仕事終わり 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",遅め,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",遅め 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",遅め 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",遅め 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",遅め 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",早め,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",早め 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",早め 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",早め 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",早め 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",空いてる時,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",空いてる時 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",空いてる時 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",空いてる時 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",空いてる時 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",最短,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",最短 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",最短 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",最短 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",最短 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",まだわからん,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",まだわからん 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",まだわからん 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",まだわからん 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",まだわからん 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",多分その日,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",多分その日 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",多分その日 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",多分その日 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",多分その日 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",たぶん夜,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",たぶん夜 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",たぶん夜 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",たぶん夜 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",たぶん夜 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",ですか？,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",ですか？ 1,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",ですか？ 2,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",ですか？ 3,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+"confirmation_required",ですか？ 4,保存・確定せず確認質問へ進む,"低信頼データをrequested_datetime/selected_therapist/customer_nameへ保存しない",100
+time_ambiguity_guard,夜10時です,明示的な夜10時として22:00を許可する,低信頼扱いで確認を繰り返さない,95
+time_ambiguity_guard,朝10時です,明示的な朝10時として10:00を許可する,確認なしで22:00へ変換しない,95
+time_ambiguity_guard,12日は10時ぐらいに空いてる人とかありますか？,time_confidenceが0.85未満なら確認質問へ進む,候補探索や予約判定へ進まない,100

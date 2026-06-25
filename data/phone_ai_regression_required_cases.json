@@ -1,0 +1,726 @@
+{
+  "owner": "担当G: QA/回帰テスト責任者",
+  "rule_source": "AGENTS.md",
+  "purpose": "電話AIの予約受付品質を、人間受付レベルに近づけるための必須回帰ケース定義。未確認を確認済みとして扱わない。",
+  "created_at_jst": "2026-06-09",
+  "scope": {
+    "write_policy": "新規ファイルのみ。既存実装ファイルは編集しない。",
+    "production_phone_required": true,
+    "internal_test_is_reference_only_until_production_phone_passes": true,
+    "forbidden_claims": [
+      "本番実電話未確認なのに合格と言うこと",
+      "SMS未確認なのに予約完了と言うこと",
+      "DB/管理画面未確認なのに反映済みと言うこと",
+      "内部テストだけで提出可能と言うこと"
+    ]
+  },
+  "observation_fields_template": {
+    "case_id": "",
+    "test_type": "internal | production_phone",
+    "tested_at_jst": "",
+    "call_sid": "",
+    "input_sequence_observed": [],
+    "assistant_responses_full": [],
+    "state_transition": [],
+    "requested_date": "",
+    "requested_time": "",
+    "requested_datetime": "",
+    "selected_therapist": "",
+    "suggested_therapist": "",
+    "customer_name": "",
+    "customer_phone": "",
+    "course": "",
+    "availability_check_result": "",
+    "matched_shift_count": null,
+    "matched_booking_conflict_count": null,
+    "reservation_id": "",
+    "reservation_status": "",
+    "sms_status": "",
+    "sms_sid": "",
+    "dashboard_visible": null,
+    "pass_fail": "未実施 | 合格 | 不合格",
+    "failure_reason": "",
+    "suspected_owner": "担当A | 担当B | 担当C | 担当D | 担当E | 担当F | 担当G | 担当H | 未特定",
+    "evidence": ""
+  },
+  "scoring_template": {
+    "internal_regression": {
+      "status_label": "内部テスト",
+      "can_be_final_pass": false,
+      "minimum_cases": 50,
+      "score_rule": "内部テストは品質の参考点。100点でも提出可能扱いは禁止。",
+      "required_report_fields": [
+        "実施件数",
+        "合格件数",
+        "不合格件数",
+        "未実施件数",
+        "代表的な失敗",
+        "本番実電話で未確認の項目"
+      ]
+    },
+    "production_phone_regression": {
+      "status_label": "本番実電話テスト",
+      "can_be_final_pass": true,
+      "minimum_cases_before_submit": 50,
+      "required_for_final_submit": [
+        "call_sid",
+        "AI返答全文",
+        "DB保存結果",
+        "SMS送信結果",
+        "管理画面表示結果"
+      ],
+      "score_rule": "本番実電話で予約確定、SMS、DB、管理画面まで確認できたケースのみ合格扱い。1件でも重大不具合があれば提出不可。"
+    },
+    "final_submit_gate": {
+      "submit_allowed": false,
+      "must_all_pass": [
+        "日時コンテキスト保持",
+        "相対日時処理",
+        "空き確認",
+        "セラピスト誤抽出防止",
+        "顧客名誤抽出防止",
+        "電話番号処理",
+        "予約確定",
+        "SMS送信",
+        "管理画面反映",
+        "同一返答ループ防止",
+        "本番実電話証跡"
+      ],
+      "judgement": "現時点では各ケース未実施のため提出不可。"
+    }
+  },
+  "required_cases": [
+    {
+      "case_id": "REG-001",
+      "category": "latest_failure_relative_hours",
+      "priority": 100,
+      "input_sequence": [
+        "2時間後とか？"
+      ],
+      "expected_behavior": "現在時刻から2時間後として相対時刻を解釈する。2時として午前/夜の確認に進まない。",
+      "forbidden_behavior": "2時ぐらいですね。午前2時か夜2時、どちらをご希望ですか？と返すこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-002",
+      "category": "relative_hours",
+      "priority": 100,
+      "input_sequence": [
+        "3時間後って空いてる？"
+      ],
+      "expected_behavior": "現在時刻から3時間後で空き確認する。日付またぎの場合もJSTで正しく処理する。",
+      "forbidden_behavior": "3時として扱うこと。前回日時を流用すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-003",
+      "category": "relative_hours_with_explicit_time",
+      "priority": 100,
+      "input_sequence": [
+        "2時間後なんで23時くらいです"
+      ],
+      "expected_behavior": "明示された23時を優先し、必要なら日時確認を行う。",
+      "forbidden_behavior": "2時や2時間後だけで確定すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-004",
+      "category": "time_disambiguation",
+      "priority": 95,
+      "input_sequence": [
+        "10時で"
+      ],
+      "expected_behavior": "営業時間と文脈で信頼度が不足する場合、午前10時か夜10時か確認する。",
+      "forbidden_behavior": "確認なしで22時に変換すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-005",
+      "category": "time_disambiguation",
+      "priority": 95,
+      "input_sequence": [
+        "夜の10時で"
+      ],
+      "expected_behavior": "22:00として扱い、空き確認へ進む。",
+      "forbidden_behavior": "午前10時として扱うこと。再度午前/夜を聞くこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-006",
+      "category": "time_disambiguation",
+      "priority": 90,
+      "input_sequence": [
+        "朝の10時で"
+      ],
+      "expected_behavior": "10:00として扱う。ただし営業時間外なら予約不可または営業時間案内を行う。",
+      "forbidden_behavior": "22:00に変換すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-007",
+      "category": "date_time_context",
+      "priority": 100,
+      "input_sequence": [
+        "12日の",
+        "20時"
+      ],
+      "expected_behavior": "12日の日付を保持し、20時と結合して requested_datetime を作る。",
+      "forbidden_behavior": "本日20時として扱うこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-008",
+      "category": "date_time_context",
+      "priority": 100,
+      "input_sequence": [
+        "20時",
+        "12日で"
+      ],
+      "expected_behavior": "先に聞いた20時を保持し、12日と結合する。",
+      "forbidden_behavior": "時間を消すこと。日付だけ再確認に戻り続けること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-009",
+      "category": "date_correction",
+      "priority": 100,
+      "input_sequence": [
+        "12日で",
+        "やっぱ13日"
+      ],
+      "expected_behavior": "requested_date を13日に上書きする。",
+      "forbidden_behavior": "12日を保持したまま予約確認へ進むこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-010",
+      "category": "time_correction",
+      "priority": 100,
+      "input_sequence": [
+        "20時で",
+        "やっぱ21時"
+      ],
+      "expected_behavior": "requested_time を21:00に上書きする。",
+      "forbidden_behavior": "20:00のまま空き確認または復唱すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-011",
+      "category": "relative_date",
+      "priority": 100,
+      "input_sequence": [
+        "2日後空いてますか？"
+      ],
+      "expected_behavior": "2026-06-09基準なら2026-06-11として扱う。",
+      "forbidden_behavior": "前回日付を保持すること。今日として扱うこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-012",
+      "category": "relative_date",
+      "priority": 100,
+      "input_sequence": [
+        "3日後の22時いけます？"
+      ],
+      "expected_behavior": "2026-06-09基準なら2026-06-12 22:00として扱う。",
+      "forbidden_behavior": "本日22時として扱うこと。3時として扱うこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-013",
+      "category": "ambiguous_datetime",
+      "priority": 90,
+      "input_sequence": [
+        "夜で"
+      ],
+      "expected_behavior": "具体的な時間を確認する。",
+      "forbidden_behavior": "勝手に20時や22時で確定すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-014",
+      "category": "ambiguous_datetime",
+      "priority": 90,
+      "input_sequence": [
+        "仕事終わりくらい"
+      ],
+      "expected_behavior": "具体的な希望時間を確認する。",
+      "forbidden_behavior": "推測で時刻を確定すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-015",
+      "category": "datetime_question",
+      "priority": 95,
+      "input_sequence": [
+        "12日の11時ですか？"
+      ],
+      "expected_behavior": "質問として扱い、予約希望日時として保存しない。",
+      "forbidden_behavior": "requested_datetime を12日11時で確定すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-016",
+      "category": "availability_search",
+      "priority": 100,
+      "input_sequence": [
+        "空いてる日教えて"
+      ],
+      "expected_behavior": "候補探索モードに入り、DBから案内可能候補を探す。",
+      "forbidden_behavior": "直前の満枠返答を繰り返すこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-017",
+      "category": "availability_search",
+      "priority": 100,
+      "input_sequence": [
+        "いつ空いてる？"
+      ],
+      "expected_behavior": "予約可能な候補日時とセラピスト候補を返す。",
+      "forbidden_behavior": "日時を最初から聞き直すだけで終わること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-018",
+      "category": "availability_search",
+      "priority": 100,
+      "input_sequence": [
+        "その時間以外ないですか？"
+      ],
+      "expected_behavior": "直前希望日時を除外して別候補を探す。",
+      "forbidden_behavior": "同じ候補または同じ満枠返答を繰り返すこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-019",
+      "category": "availability_search",
+      "priority": 100,
+      "input_sequence": [
+        "誰か空いてる人いる？"
+      ],
+      "expected_behavior": "日時が不足していれば希望日時を確認する。日時があれば空きセラピストを検索する。",
+      "forbidden_behavior": "本日の出勤者一覧だけを返すこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-020",
+      "category": "therapist_false_positive",
+      "priority": 100,
+      "input_sequence": [
+        "空いてる人かないですか？"
+      ],
+      "expected_behavior": "kana等のセラピスト名として保存せず、空き確認質問として扱う。",
+      "forbidden_behavior": "selected_therapist = kana にすること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-021",
+      "category": "therapist_false_positive",
+      "priority": 100,
+      "input_sequence": [
+        "かなり空いてますか？"
+      ],
+      "expected_behavior": "kanaとして抽出しない。空き確認として扱う。",
+      "forbidden_behavior": "selected_therapist = kana にすること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-022",
+      "category": "therapist_selection",
+      "priority": 95,
+      "input_sequence": [
+        "かなさんでお願いします"
+      ],
+      "expected_behavior": "実在セラピスト名と完全一致または高信頼なら selected_therapist に保存する。",
+      "forbidden_behavior": "低信頼の部分一致で保存すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-023",
+      "category": "free_booking",
+      "priority": 95,
+      "input_sequence": [
+        "誰でもいいです"
+      ],
+      "expected_behavior": "フリー予約として扱い、selected_therapist は空にする。",
+      "forbidden_behavior": "誰でもいいをセラピスト名として保存すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-024",
+      "category": "free_booking",
+      "priority": 95,
+      "input_sequence": [
+        "指名なしで"
+      ],
+      "expected_behavior": "フリー予約として扱い、空きセラピストから割当候補を判断する。",
+      "forbidden_behavior": "selected_therapist を保存すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-025",
+      "category": "recommendation",
+      "priority": 90,
+      "input_sequence": [
+        "誰がおすすめ？"
+      ],
+      "expected_behavior": "おすすめ案内または条件確認を行い、customer_nameとして保存しない。",
+      "forbidden_behavior": "customer_name = 誰がおすすめ にすること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-026",
+      "category": "recommendation",
+      "priority": 90,
+      "input_sequence": [
+        "初めてなら誰がいい？"
+      ],
+      "expected_behavior": "初回向けおすすめ案内に進む。予約者名として保存しない。",
+      "forbidden_behavior": "customer_nameに保存すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-027",
+      "category": "referral",
+      "priority": 95,
+      "input_sequence": [
+        "紹介なんだけど"
+      ],
+      "expected_behavior": "紹介者名を確認する。",
+      "forbidden_behavior": "customer_nameとして保存すること。日時確認へ先に進むこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-028",
+      "category": "referral",
+      "priority": 95,
+      "input_sequence": [
+        "友達に聞いて電話しました"
+      ],
+      "expected_behavior": "紹介来店として扱い、紹介者情報を確認する。",
+      "forbidden_behavior": "友達に聞いてを顧客名にすること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-029",
+      "category": "cancel",
+      "priority": 100,
+      "input_sequence": [
+        "キャンセルで"
+      ],
+      "expected_behavior": "予約導線を終了または既存予約キャンセル確認へ進む。",
+      "forbidden_behavior": "予約継続すること。セラピスト名として保存すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-030",
+      "category": "cancel",
+      "priority": 100,
+      "input_sequence": [
+        "やっぱやめます"
+      ],
+      "expected_behavior": "予約導線を終了する。",
+      "forbidden_behavior": "日時確認や名前確認に戻ること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-031",
+      "category": "hold",
+      "priority": 90,
+      "input_sequence": [
+        "うーん、まだ考えてる"
+      ],
+      "expected_behavior": "保留状態として扱い、予約確定しない。",
+      "forbidden_behavior": "予約確定またはSMS送信へ進むこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-032",
+      "category": "name_clarification",
+      "priority": 90,
+      "input_sequence": [
+        "名前って僕の名前？"
+      ],
+      "expected_behavior": "予約者本人の名前が必要と説明し、再度名前を聞く。",
+      "forbidden_behavior": "customer_name = 名前って僕の名前 にすること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-033",
+      "category": "name_clarification",
+      "priority": 90,
+      "input_sequence": [
+        "セラピストの名前ですかね？"
+      ],
+      "expected_behavior": "顧客名として保存せず、予約者名を依頼する。",
+      "forbidden_behavior": "customer_nameとして保存すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-034",
+      "category": "customer_name",
+      "priority": 95,
+      "input_sequence": [
+        "佐藤です"
+      ],
+      "expected_behavior": "customer_name = 佐藤 として保存する。",
+      "forbidden_behavior": "名前を聞き直し続けること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-035",
+      "category": "customer_name",
+      "priority": 95,
+      "input_sequence": [
+        "山田"
+      ],
+      "expected_behavior": "名字だけでも customer_name = 山田 として保存する。",
+      "forbidden_behavior": "氏名フルネームを必須にすること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-036",
+      "category": "phone_number",
+      "priority": 100,
+      "input_sequence": [
+        "0803788"
+      ],
+      "expected_behavior": "不完全番号として聞き返し、customer_phoneに保存しない。",
+      "forbidden_behavior": "customer_phoneとして保存すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-037",
+      "category": "phone_number",
+      "priority": 100,
+      "input_sequence": [
+        "080-3788-4404"
+      ],
+      "expected_behavior": "customer_phone = 08037884404 として保存する。",
+      "forbidden_behavior": "日時として誤抽出すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-038",
+      "category": "phone_number_guard",
+      "priority": 100,
+      "input_sequence": [
+        "080-37-884404です"
+      ],
+      "expected_behavior": "電話番号候補として扱い、日付や時刻に変換しない。不完全なら聞き返す。",
+      "forbidden_behavior": "9月6日など日時として保存すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-039",
+      "category": "course",
+      "priority": 90,
+      "input_sequence": [
+        "90分で"
+      ],
+      "expected_behavior": "DBに登録された90分コースへ対応付ける。",
+      "forbidden_behavior": "DB未登録の60/120分メニューを案内すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-040",
+      "category": "course",
+      "priority": 90,
+      "input_sequence": [
+        "コース何がありますか？"
+      ],
+      "expected_behavior": "DBに登録されている有効コースのみ案内する。",
+      "forbidden_behavior": "固定の60分、90分、120分を捏造すること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-041",
+      "category": "availability_before_personal_info",
+      "priority": 100,
+      "input_sequence": [
+        "今日18時って誰か空いてますか？"
+      ],
+      "expected_behavior": "最初に空き確認を行い、空きなしなら名前や電話番号を聞かない。",
+      "forbidden_behavior": "空き確認前に顧客名、電話番号、コース確認へ進むこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-042",
+      "category": "therapist_availability",
+      "priority": 100,
+      "input_sequence": [
+        "美咲さん18時空いてますか？"
+      ],
+      "expected_behavior": "美咲の18時シフトと予約重複を確認し、空きがなければ即時に断る。",
+      "forbidden_behavior": "美咲で予約導線を進めること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-043",
+      "category": "reservation_confirmation",
+      "priority": 100,
+      "input_sequence": [
+        "12日の22時",
+        "フリーで",
+        "佐藤です",
+        "080-3788-4404",
+        "はい"
+      ],
+      "expected_behavior": "復唱前に validateReservation を通し、はい後に予約確定とSMS送信へ進む。",
+      "forbidden_behavior": "復唱後に空いていませんと言うこと。はい後に無反応になること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-044",
+      "category": "sms_success",
+      "priority": 100,
+      "input_sequence": [
+        "予約確定後"
+      ],
+      "expected_behavior": "SMS本文に日時、コース、料金、予約種別、担当、指名料、住所、店舗TELを含め、sms_status=SENTをDB保存する。",
+      "forbidden_behavior": "SMS未送信なのに送信済み扱いにすること。文字化けすること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-045",
+      "category": "sms_failure",
+      "priority": 95,
+      "input_sequence": [
+        "予約確定後にSMS送信失敗"
+      ],
+      "expected_behavior": "予約自体は勝手に取り消さず、sms_status=FAILEDとしてDB/管理画面に残す。",
+      "forbidden_behavior": "SMS失敗を隠すこと。予約まで消すこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-046",
+      "category": "dashboard_consistency",
+      "priority": 100,
+      "input_sequence": [
+        "本番実電話で予約確定"
+      ],
+      "expected_behavior": "DBの予約、通知、SMS状態が管理画面に一致して表示される。",
+      "forbidden_behavior": "DBと画面で件数や内容がずれること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-047",
+      "category": "repeat_response_guard",
+      "priority": 95,
+      "input_sequence": [
+        "12日20時空いてますか？",
+        "他ない？",
+        "他は？"
+      ],
+      "expected_behavior": "同じ満枠返答を繰り返さず、候補探索または別提案に切り替える。",
+      "forbidden_behavior": "同じ文面を3回以上繰り返すこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-048",
+      "category": "free_talk_recovery",
+      "priority": 90,
+      "input_sequence": [
+        "何を言えばいい？"
+      ],
+      "expected_behavior": "予約に必要な情報を自然に案内し、導線へ戻す。",
+      "forbidden_behavior": "無反応になること。関係ない説明を長く続けること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-049",
+      "category": "free_talk_recovery",
+      "priority": 90,
+      "input_sequence": [
+        "聞こえてます？"
+      ],
+      "expected_behavior": "聞こえている旨を短く返し、直前の質問または必要情報に戻る。",
+      "forbidden_behavior": "予約情報として保存すること。無反応になること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-050",
+      "category": "free_talk_recovery",
+      "priority": 90,
+      "input_sequence": [
+        "ちょっと待って"
+      ],
+      "expected_behavior": "待機または保留として扱い、勝手に予約確定しない。",
+      "forbidden_behavior": "予約確定やSMS送信に進むこと。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-051",
+      "category": "natural_flow",
+      "priority": 95,
+      "input_sequence": [
+        "今日行ける？",
+        "できれば遅め",
+        "誰でもいい",
+        "90分",
+        "佐藤",
+        "08037884404",
+        "はい"
+      ],
+      "expected_behavior": "遅めは曖昧なので具体時間を確認し、フリー予約、DBコース、顧客名、電話番号、復唱、確定、SMSまで進む。",
+      "forbidden_behavior": "遅めを勝手に時刻確定すること。はい後に止まること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-052",
+      "category": "natural_flow",
+      "priority": 95,
+      "input_sequence": [
+        "初めてなんですけど",
+        "今日空いてます？",
+        "2時間後くらい",
+        "フリーで",
+        "山田です",
+        "080-1234-5678",
+        "はい"
+      ],
+      "expected_behavior": "初回案内を短く行い、2時間後を相対時刻として扱い、予約確定まで進む。",
+      "forbidden_behavior": "2時と誤認識すること。初回案内だけで予約導線から外れること。",
+      "observation_fields": "observation_fields_template"
+    },
+    {
+      "case_id": "REG-053",
+      "category": "production_smoke",
+      "priority": 100,
+      "input_sequence": [
+        "本番電話で自然会話予約",
+        "SMS受信確認",
+        "管理画面確認"
+      ],
+      "expected_behavior": "本番電話のcall_sid、予約ID、SMS SID、管理画面表示証跡を残す。",
+      "forbidden_behavior": "内部テストだけで本番合格にすること。",
+      "observation_fields": "observation_fields_template"
+    }
+  ],
+  "submission_judgement_framework": {
+    "status_values": [
+      "提出不可",
+      "条件付き継続",
+      "本番確認待ち",
+      "提出可能"
+    ],
+    "current_default_status": "提出不可",
+    "submit_possible_only_if": [
+      "必須回帰ケースの内部テストが全件合格",
+      "本番実電話テストが主要導線で合格",
+      "予約DB作成が確認済み",
+      "SMSが実際に届き sms_status=SENT がDB保存済み",
+      "管理画面表示とDBが一致",
+      "失敗ケースが未修正のまま残っていない"
+    ],
+    "qa_report_sections": [
+      "確認済み",
+      "未確認",
+      "推測",
+      "実装上の判断",
+      "要ユーザー対応",
+      "提出可否"
+    ]
+  }
+}

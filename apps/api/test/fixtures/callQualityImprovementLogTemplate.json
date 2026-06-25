@@ -1,0 +1,30 @@
+{
+  "version": "2026-06-15",
+  "purpose": "実通話ログを後から改善するための保存項目テンプレート。個人情報は必ずマスクして扱う。",
+  "fields": [
+    "inputUtterance",
+    "aiResponse",
+    "intent",
+    "extractedReservationInfo",
+    "missingInformation",
+    "escalationReason",
+    "safetyDecision",
+    "ngDecision",
+    "knowledgeReferenceResult",
+    "failureNote",
+    "improvementStatus"
+  ],
+  "piiMaskPolicy": {
+    "callerPhone": "末尾4桁以外をマスク",
+    "customerName": "先頭1文字以外をマスク",
+    "transcript": "電話番号・氏名らしき値をマスク"
+  },
+  "improvementStatuses": [
+    "new",
+    "triaged",
+    "pattern_added",
+    "fixed",
+    "verified_in_mock",
+    "verified_in_real_call"
+  ]
+}

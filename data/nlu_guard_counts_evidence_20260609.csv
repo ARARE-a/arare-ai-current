@@ -1,0 +1,21 @@
+﻿scope,metric,name,count,notes
+file,row_count,date_time_context_training.csv,1800,data CSV row count excluding header; evidence file itself excluded
+file,row_count,men_es_reservation_call_intent_style_variations.csv,48000,data CSV row count excluding header; evidence file itself excluded
+file,row_count,men_es_reservation_call_intents.csv,4800,data CSV row count excluding header; evidence file itself excluded
+file,row_count,men_es_therapist_availability_patterns.csv,300,data CSV row count excluding header; evidence file itself excluded
+file,row_count,nlu_guard_classification_augmentation_3000.csv,3000,data CSV row count excluding header; evidence file itself excluded
+file,row_count,phone_ai_datetime_guard_1000.csv,1003,data CSV row count excluding header; evidence file itself excluded
+file,row_count,phone_ai_destructive_intents.csv,1280,data CSV row count excluding header; evidence file itself excluded
+all_data_csv,total_rows_excluding_evidence,all_csv_training_and_guard_data,60183,sum of data/*.csv row counts excluding this evidence CSV
+target_category,augmentation_rows,relative_date_context,500,new rows generated in nlu_guard_classification_augmentation_3000.csv
+target_category,combined_rows,relative_date_context,700,combined matching category or intent rows across data CSV files excluding evidence CSV
+target_category,augmentation_rows,time_disambiguation,500,new rows generated in nlu_guard_classification_augmentation_3000.csv
+target_category,combined_rows,time_disambiguation,500,combined matching category or intent rows across data CSV files excluding evidence CSV
+target_category,augmentation_rows,pending_confirmation,500,new rows generated in nlu_guard_classification_augmentation_3000.csv
+target_category,combined_rows,pending_confirmation,500,combined matching category or intent rows across data CSV files excluding evidence CSV
+target_category,augmentation_rows,availability_search,500,new rows generated in nlu_guard_classification_augmentation_3000.csv
+target_category,combined_rows,availability_search,500,combined matching category or intent rows across data CSV files excluding evidence CSV
+target_category,augmentation_rows,therapist_false_positive,500,new rows generated in nlu_guard_classification_augmentation_3000.csv
+target_category,combined_rows,therapist_false_positive,700,combined matching category or intent rows across data CSV files excluding evidence CSV
+target_category,augmentation_rows,repeat_response_guard,500,new rows generated in nlu_guard_classification_augmentation_3000.csv
+target_category,combined_rows,repeat_response_guard,600,combined matching category or intent rows across data CSV files excluding evidence CSV

@@ -1,0 +1,734 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum ReservationStatus {
+  TENTATIVE
+  CONFIRMED
+  VISITED
+  CANCELLED
+  NO_SHOW
+}
+
+enum ConversationChannel {
+  PHONE
+  LINE
+  WEB_CHAT
+  ADMIN
+}
+
+enum MessageRole {
+  CUSTOMER
+  AI
+  STAFF
+  SYSTEM
+}
+
+enum NotificationType {
+  RESERVATION_CONFIRMED
+  REMINDER_PREVIOUS_DAY
+  REMINDER_SAME_DAY
+  RESERVATION_CHANGED
+  RESERVATION_CANCELLED
+  THANK_YOU
+  REVISIT_PROMOTION
+  THERAPIST_SHIFT
+  THERAPIST_BOOKING
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum TherapistStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+}
+
+enum ActorType {
+  AI
+  ADMIN
+  STAFF
+  SYSTEM
+}
+
+enum EscalationStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+}
+
+enum EscalationReason {
+  UNCLEAR_INPUT
+  COMPLAINT
+  DISCOUNT_NEGOTIATION
+  SPECIAL_REQUEST
+  NG_WORD
+  POSSIBLE_BLACKLIST
+  LOW_CONFIDENCE
+  RULE_EXCEPTION
+  PERSONAL_QUESTION
+}
+
+enum CallLogStatus {
+  RECEIVED
+  TRANSCRIBED
+  SUMMARIZED
+  ESCALATED
+  HOLD_CREATED
+}
+
+enum PhoneRoutingMode {
+  ALWAYS_AI
+  AFTER_HOURS_AI
+  BUSY_OR_NO_ANSWER_AI
+  MANUAL_ONLY
+}
+
+model Store {
+  id             String           @id @default(cuid())
+  name           String
+  phone          String?
+  address        String?
+  openTime       String           @default("12:00")
+  closeTime      String           @default("29:00")
+  users          User[]
+  customers      Customer[]
+  therapists     Therapist[]
+  shifts         Shift[]
+  rooms          Room[]
+  courses        Course[]
+  reservations   Reservation[]
+  conversations  Conversation[]
+  notifications  Notification[]
+  notificationLogs NotificationLog[]
+  salesRecords   SalesRecord[]
+  blacklist      BlacklistEntry[]
+  setting        StoreSetting?
+  knowledgeBase  KnowledgeBase[]
+  faqs           Faq[]
+  talkScripts    TalkScript[]
+  courseOptions  CourseOption[]
+  therapistCourses TherapistCourse[]
+  auditLogs      AuditLog[]
+  reservationChangeHistories ReservationChangeHistory[]
+  reservationHolds ReservationHold[]
+  escalations    Escalation[]
+  aiSetting      AiSetting?
+  blockedSlots   BlockedSlot[]
+  consentLogs    ConsentLog[]
+  callLogs       CallLog[]
+  phoneSettings  StorePhoneSetting[]
+  phoneEvents    StorePhoneEvent[]
+  usageMeters    StoreUsageMeter[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model User {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name      String
+  email     String   @unique
+  role      UserRole @default(STAFF)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id              String         @id @default(cuid())
+  storeId          String
+  store            Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name             String
+  phone            String
+  lineId           String?
+  memo             String?
+  isNg             Boolean        @default(false)
+  visitCount       Int            @default(0)
+  reservations     Reservation[]
+  conversations    Conversation[]
+  blacklistEntries BlacklistEntry[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([storeId, phone])
+  @@index([storeId, name])
+}
+
+model Therapist {
+  id              String            @id @default(cuid())
+  storeId          String
+  store            Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  displayName      String
+  phone            String?
+  lineId           String?
+  profile          String?
+  specialties      String[]          @default([])
+  status           TherapistStatus   @default(ACTIVE)
+  acceptsNomination Boolean          @default(true)
+  nominationFee    Int               @default(0)
+  shifts           Shift[]
+  reservations     Reservation[]
+  salesRecords     SalesRecord[]
+  supportedCourses TherapistCourse[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([storeId, status])
+  @@index([storeId, lineId])
+  @@unique([storeId, displayName])
+}
+
+model Shift {
+  id           String      @id @default(cuid())
+  storeId       String
+  store         Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  therapistId  String
+  therapist    Therapist   @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  startsAt     DateTime
+  endsAt       DateTime
+  status       ShiftStatus @default(SCHEDULED)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([storeId, startsAt, endsAt])
+  @@index([therapistId, startsAt, endsAt])
+}
+
+model Room {
+  id           String        @id @default(cuid())
+  storeId       String
+  store         Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name         String
+  isActive     Boolean       @default(true)
+  reservations Reservation[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([storeId, name])
+}
+
+model Course {
+  id           String        @id @default(cuid())
+  storeId       String
+  store         Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name         String
+  durationMin  Int
+  price        Int
+  description  String?
+  isActive     Boolean       @default(true)
+  reservations Reservation[]
+  salesRecords SalesRecord[]
+  options      CourseOption[]
+  therapists   TherapistCourse[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([storeId, name])
+}
+
+model CourseOption {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  courseId    String?
+  course      Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  name        String
+  price       Int      @default(0)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([storeId, name])
+  @@index([storeId, isActive])
+  @@index([courseId])
+}
+
+model TherapistCourse {
+  id          String    @id @default(cuid())
+  storeId     String
+  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  therapistId String
+  therapist   Therapist @relation(fields: [therapistId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([therapistId, courseId])
+  @@index([storeId])
+  @@index([courseId])
+}
+
+model Reservation {
+  id             String            @id @default(cuid())
+  storeId         String
+  store           Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  therapistId     String?
+  therapist       Therapist?        @relation(fields: [therapistId], references: [id], onDelete: SetNull)
+  roomId          String?
+  room            Room?             @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  courseId        String
+  course          Course            @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  startsAt        DateTime
+  endsAt          DateTime
+  status          ReservationStatus @default(TENTATIVE)
+  nominated       Boolean           @default(false)
+  firstVisit      Boolean           @default(false)
+  note            String?
+  confirmationText String?
+  source          ConversationChannel @default(ADMIN)
+  conversationId  String?
+  conversation    Conversation?     @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  notifications   Notification[]
+  notificationLogs NotificationLog[]
+  salesRecord     SalesRecord?
+  auditLogs       AuditLog[]
+  changeHistories ReservationChangeHistory[]
+  holds           ReservationHold[]
+  consentLogs     ConsentLog[]
+  callLogs        CallLog[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([storeId, startsAt, endsAt])
+  @@index([therapistId, startsAt, endsAt])
+  @@index([roomId, startsAt, endsAt])
+}
+
+model Conversation {
+  id           String              @id @default(cuid())
+  storeId       String
+  store         Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId    String?
+  customer      Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  channel       ConversationChannel
+  externalUserId String?
+  workflowState String              @default("COLLECTING")
+  reservationDraft Json?
+  summary       String?
+  messages      Message[]
+  reservations  Reservation[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([storeId, channel, updatedAt])
+  @@index([storeId, channel, externalUserId, updatedAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  content        String
+  createdAt      DateTime     @default(now())
+}
+
+model Notification {
+  id            String             @id @default(cuid())
+  storeId        String
+  store          Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  reservationId String?
+  reservation   Reservation?        @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  type          NotificationType
+  channel       ConversationChannel
+  status        NotificationStatus  @default(PENDING)
+  targetName    String?
+  targetPhone   String?
+  targetLineId  String?
+  callSid       String?
+  customerPhone String?
+  smsTo         String?
+  smsSid        String?
+  smsDeliveryStatus String?
+  smsDeliveryCheckedAt DateTime?
+  smsDeliveredAt DateTime?
+  smsDeliveryRaw Json?
+  smsErrorCode  String?
+  smsErrorMessage String?
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+  body          String
+  logs          NotificationLog[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([storeId, status, scheduledAt])
+  @@index([storeId, type, status, scheduledAt])
+  @@index([smsSid])
+  @@index([storeId, smsDeliveryStatus])
+}
+
+model NotificationLog {
+  id                String              @id @default(cuid())
+  storeId           String
+  store             Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  notificationId    String?
+  notification      Notification?       @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  reservationId     String?
+  reservation       Reservation?        @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  type              NotificationType
+  channel           ConversationChannel
+  status            NotificationStatus
+  recipientName     String?
+  recipientPhone    String?
+  recipientLineId   String?
+  provider          String?
+  providerMessageId String?
+  dedupeKey         String?
+  errorCode         String?
+  errorMessage      String?
+  payload           Json?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
+
+  @@unique([storeId, dedupeKey])
+  @@index([storeId, type, status, createdAt])
+  @@index([notificationId])
+  @@index([reservationId])
+  @@index([providerMessageId])
+}
+
+model ReservationChangeHistory {
+  id            String       @id @default(cuid())
+  storeId       String
+  store         Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  reservationId String
+  reservation   Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  actorType     ActorType    @default(SYSTEM)
+  actorId       String?
+  reason        String?
+  before        Json
+  after         Json
+  createdAt     DateTime     @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([reservationId, createdAt])
+}
+
+model SalesRecord {
+  id            String       @id @default(cuid())
+  storeId        String
+  store          Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  reservationId String       @unique
+  reservation   Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  therapistId   String?
+  therapist     Therapist?   @relation(fields: [therapistId], references: [id], onDelete: SetNull)
+  courseId      String
+  course        Course       @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  amount        Int
+  nominationFee Int          @default(0)
+  recordedAt    DateTime
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([storeId, recordedAt])
+}
+
+model BlacklistEntry {
+  id          String    @id @default(cuid())
+  storeId      String
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  phone        String?
+  lineId       String?
+  reason       String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([storeId, phone])
+  @@index([storeId, lineId])
+}
+
+model StoreSetting {
+  id                    String   @id @default(cuid())
+  storeId                String   @unique
+  store                  Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  reservationLeadTimeMin Int      @default(60)
+  cancelDeadlineHours    Int      @default(6)
+  nominationRequired     Boolean  @default(false)
+  ngWords                String[] @default([])
+  roomCount              Int      @default(3)
+  reservationRules       String?
+  cancellationRules      String?
+  attentionNotes         String?
+  ngResponseRules        String?
+  aiPolicy               String   @default("必須項目が揃うまで予約確定しない。確定前に必ず復唱し、YES取得後のみ確定する。")
+  phoneAiCreatesHoldOnly Boolean  @default(true)
+  autoConfirmEnabled     Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model KnowledgeBase {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  title     String
+  category  String
+  content   String
+  source    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, category, isActive])
+  @@index([storeId, updatedAt])
+}
+
+model Faq {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, question])
+  @@index([storeId, isActive, sortOrder])
+  @@map("FAQ")
+}
+
+model TalkScript {
+  id        String   @id @default(cuid())
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  title     String
+  situation String
+  content   String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId, situation, isActive])
+  @@index([storeId, sortOrder])
+}
+
+model StorePhoneSetting {
+  id                              String           @id @default(cuid())
+  storeId                          String
+  store                            Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  currentStorePhoneNumber          String?
+  aiReceptionPhoneNumber           String           @unique
+  normalizedAiReceptionPhoneNumber String           @unique
+  twilioPhoneNumberSid             String?          @unique
+  twilioAccountSid                 String?
+  twilioSubaccountSid              String?
+  voiceWebhookUrl                  String?
+  voiceRelayWsUrl                  String?
+  fallbackPhoneNumber              String?
+  voiceAiEnabled                   Boolean          @default(true)
+  routingMode                      PhoneRoutingMode @default(ALWAYS_AI)
+  recordingEnabled                 Boolean          @default(false)
+  businessHoursOnly                Boolean          @default(false)
+  callLogs                         CallLog[]
+  events                           StorePhoneEvent[]
+  createdAt                        DateTime         @default(now())
+  updatedAt                        DateTime         @updatedAt
+
+  @@index([storeId, voiceAiEnabled])
+  @@index([normalizedAiReceptionPhoneNumber])
+}
+
+model StorePhoneEvent {
+  id                  String             @id @default(cuid())
+  storeId              String
+  store                Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storePhoneSettingId  String?
+  storePhoneSetting    StorePhoneSetting? @relation(fields: [storePhoneSettingId], references: [id], onDelete: SetNull)
+  eventType            String
+  before               Json?
+  after                Json?
+  createdAt            DateTime           @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([storePhoneSettingId])
+}
+
+model StoreUsageMeter {
+  id               String   @id @default(cuid())
+  storeId           String
+  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  period            String
+  voiceCallCount    Int      @default(0)
+  voiceCallSeconds  Int      @default(0)
+  aiSessionCount    Int      @default(0)
+  estimatedCost     Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([storeId, period])
+  @@index([period])
+}
+
+model ApiRateLimit {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  count     Int      @default(0)
+  resetAt   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}
+
+model AuditLog {
+  id            String     @id @default(cuid())
+  storeId       String
+  store         Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  actorType     ActorType
+  actorId       String?
+  action        String
+  before        Json?
+  after         Json?
+  createdAt     DateTime   @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([reservationId])
+}
+
+model ReservationHold {
+  id            String              @id @default(cuid())
+  storeId       String
+  store         Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  reservationId String?
+  reservation   Reservation?        @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  customerName  String?
+  customerPhone String?
+  startsAt      DateTime
+  endsAt        DateTime
+  roomId        String?
+  therapistId   String?
+  source        ConversationChannel
+  expiresAt     DateTime
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([storeId, startsAt, endsAt])
+}
+
+model Escalation {
+  id             String             @id @default(cuid())
+  storeId         String
+  store           Store              @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  conversationId  String?
+  callLogId       String?
+  reason          EscalationReason
+  status          EscalationStatus   @default(OPEN)
+  summary         String
+  assignedTo      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([storeId, status, createdAt])
+}
+
+model AiSetting {
+  id                    String   @id @default(cuid())
+  storeId                String   @unique
+  store                  Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  tone                   String   @default("丁寧で落ち着いた受付対応")
+  forbiddenAnswers       String[] @default([])
+  escalationKeywords     String[] @default(["クレーム", "値引き", "返金", "個人的な連絡先"])
+  requireHumanApproval   Boolean  @default(true)
+  minConfidenceForHold   Float    @default(0.7)
+  minConfidenceForConfirm Float   @default(0.9)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model BlockedSlot {
+  id          String   @id @default(cuid())
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  roomId       String?
+  therapistId String?
+  startsAt     DateTime
+  endsAt       DateTime
+  reason       String
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([storeId, startsAt, endsAt])
+}
+
+model ConsentLog {
+  id            String       @id @default(cuid())
+  storeId        String
+  store          Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  customerId     String?
+  consentType    String
+  content        String
+  accepted       Boolean
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([storeId, createdAt])
+}
+
+model CallLog {
+  id              String          @id @default(cuid())
+  storeId          String
+  store            Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storePhoneSettingId String?
+  storePhoneSetting StorePhoneSetting? @relation(fields: [storePhoneSettingId], references: [id], onDelete: SetNull)
+  reservationId    String?
+  reservation      Reservation?    @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  phoneNumber      String?
+  toNumber         String?
+  twilioCallSid    String?
+  status           CallLogStatus   @default(RECEIVED)
+  recordingUrl     String?
+  transcript       String?
+  aiSummary        String?
+  confidence       Float?
+  requiredReview   Boolean         @default(false)
+  reviewNotes      String?
+  durationSeconds  Int?
+  usageMeterRecordedAt DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([storeId, createdAt])
+  @@index([storePhoneSettingId])
+  @@index([twilioCallSid])
+  @@index([usageMeterRecordedAt])
+}

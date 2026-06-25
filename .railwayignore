@@ -1,0 +1,15 @@
+.next
+node_modules
+.env
+.env.local
+.env.railway.source
+.vercel
+dist
+coverage
+*.log
+dev-server*.log
+voice-relay-*.log
+.playwright-cli
+tmp
+tsconfig.tsbuildinfo
+output

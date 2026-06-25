@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: arare-ai-voice-relay
+    runtime: node
+    buildCommand: npm ci && npm run prisma:generate
+    startCommand: npm run voice:relay
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: PUBLIC_APP_URL
+        value: https://arare-ai-three.vercel.app
+      - key: VOICE_RELAY_VALIDATE_TWILIO_SIGNATURE
+        value: "false"
+      - key: VOICE_RELAY_TTS_PROVIDER
+        value: Amazon
+      - key: VOICE_RELAY_TTS_VOICE
+        value: Takumi-Neural
+      - key: VOICE_RELAY_TRANSCRIPTION_PROVIDER
+        value: Google
