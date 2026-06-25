@@ -1026,6 +1026,11 @@ async function scriptedReplyFor(session, callerText) {
   const directNoSameDayShiftReply = await maybeReplyNoSameDayShiftDirect(session, context, text);
   if (directNoSameDayShiftReply) return directNoSameDayShiftReply;
 
+  if (activeDraft.startsAt && isExplicitAvailabilityCheckText(text)) {
+    const availabilityReply = await formatRequestedTimeAvailabilityAnswer(session, context, text);
+    if (availabilityReply) return availabilityReply;
+  }
+
   const specificTherapistFeatureReply = formatSpecificTherapistFeatureAnswer(text, context?.therapists ?? [], activeDraft);
   if (specificTherapistFeatureReply) return specificTherapistFeatureReply;
 
@@ -1660,7 +1665,7 @@ function isExplicitCourseOrPriceQuestion(text) {
 
 function isCourseMentionInsideBookingRequest(text) {
   const normalized = normalizeJapaneseSpeech(text);
-  const bookingAction = /(\u4e88\u7d04|\u53d6\u308a\u305f\u3044|\u5165\u308c\u305f\u3044|\u304a\u9858\u3044|\u7a7a\u304d|\u5e0c\u671b|できます|可能)/u.test(normalized);
+  const bookingAction = /(\u4e88\u7d04|\u53d6\u308a\u305f\u3044|\u5165\u308c\u305f\u3044|\u304a\u9858\u3044|\u7a7a\u304d|\u7a7a\u3044|\u3042\u3044|\u884c\u3051|\u3044\u3051|\u53d6\u308c|\u5165\u308c|\u5e0c\u671b|できます|可能|大丈夫)/u.test(normalized);
   if (hasDateTimeCue(normalized) && bookingAction) return true;
   return /(?:60|90|120)\s*\u5206(?:\u30b3\u30fc\u30b9)?(?:\u3067|\u306b)?(?:\u304a\u9858\u3044|\u304a\u9858\u3044\u3057\u307e\u3059|\u5e0c\u671b|\u53d6\u308a\u305f\u3044|\u5165\u308c\u305f\u3044)/u.test(normalized);
 }
@@ -2656,6 +2661,11 @@ function isAmbiguousClockTimeText(text) {
 
 function isAvailabilitySearchQuestionText(text) {
   return /(\u7a7a\u3044\u3066\u308b\u65e5|\u958b\u3044\u3066\u308b\u65e5|\u3042\u3044\u3066\u308b\u65e5|\u7a7a\u3044\u3066\u308b\u6642\u9593|\u958b\u3044\u3066\u308b\u6642\u9593|\u3042\u3044\u3066\u308b\u6642\u9593|\u7a7a\u3044\u3066\u308b\u67a0|\u958b\u3044\u3066\u308b\u67a0|\u7a7a\u304d\u67a0|\u7a7a\u304d\u5019\u88dc|\u5019\u88dc|\u3044\u3064.*\u7a7a\u3044|\u3044\u3064.*\u958b\u3044|\u3044\u3064\u3050.*\u958b\u3044|\u3044\u3064\u3054\u308d.*\u7a7a\u3044|\u6700\u77ed|\u4e00\u756a\u65e9\u3044|\u4e00\u756a\u8fd1\u3044|\u4e00\u756a\u8fd1\u304f|\u4e88\u7d04\u3067\u304d\u308b\u65e5|\u4f55\u6642\u306a\u3089|\u3069\u306e\u65e5\u306a\u3089|\u5225\u306e\u65e5|\u5225\u306e\u6642\u9593|\u4ed6\u306e\u6642\u9593|\u305d\u306e\u6642\u9593.*\u4ee5\u5916|\u305d\u308c.*\u4ee5\u5916|\u4ed6\u306b\u7a7a\u304d|\u7a7a\u3044\u3066\u308b\u4eba|\u8ab0\u304b\u7a7a\u3044|\u8ab0\u304b\u3044\u306a\u3044|\u7a7a\u3044\u3066\u308b\u5b50|\u67a0\u306f|\u7a7a\u304d\u306f|\u5165\u308c\u308b|\u5165\u3063\u3066\u306a\u3044)/u.test(text);
+}
+
+function isExplicitAvailabilityCheckText(text) {
+  const normalized = normalizeJapaneseSpeech(text).replace(/\s+/g, "");
+  return /(\u7a7a\u3044|\u3042\u3044|\u7a7a\u304d|\u884c\u3051|\u3044\u3051|\u5165\u308c|\u53d6\u308c|\u53ef\u80fd|\u5927\u4e08\u592b|\u3067\u304d\u307e\u3059\u304b)/u.test(normalized);
 }
 
 function isTherapistFalsePositiveText(text) {

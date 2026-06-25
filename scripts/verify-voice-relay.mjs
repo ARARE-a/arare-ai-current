@@ -8,6 +8,7 @@ const relayUrl = process.argv[2] ?? process.env.VOICE_RELAY_VERIFY_URL ?? buildD
 const callSid = `CA_VERIFY_RELAY_${Date.now()}`;
 const timeoutMs = Number(process.env.VERIFY_VOICE_RELAY_TIMEOUT_MS ?? 30000);
 const received = [];
+let promptStartIndex = 0;
 let promptSent = false;
 
 try {
@@ -20,11 +21,28 @@ try {
 
 function verifyRelay() {
   return new Promise((resolve, reject) => {
+    let settled = false;
     const timeout = setTimeout(() => {
-      reject(new Error(`Voice relay verification timed out after ${timeoutMs}ms. Received: ${JSON.stringify(received)}`));
+      finish(false, new Error(`Voice relay verification timed out after ${timeoutMs}ms. Received: ${JSON.stringify(received)}`));
     }, timeoutMs);
 
     const ws = new WebSocket(relayUrl);
+
+    function finish(ok, value) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      try {
+        ws.close();
+      } catch {
+        // Ignore close errors during verification cleanup.
+      }
+      if (ok) {
+        resolve(value);
+      } else {
+        reject(value);
+      }
+    }
 
     ws.on("open", () => {
       ws.send(
@@ -47,6 +65,7 @@ function verifyRelay() {
       );
 
       setTimeout(() => {
+        promptStartIndex = received.length;
         promptSent = true;
         ws.send(
           JSON.stringify({
@@ -63,27 +82,33 @@ function verifyRelay() {
       const message = JSON.parse(raw.toString());
       received.push(message);
 
-      const aiTextMessages = received.filter(
+      const aiTextMessages = received.slice(promptStartIndex).filter(
         (item) => promptSent && item.type === "text" && String(item.token ?? "").trim().length > 0
       );
       const hasText = aiTextMessages.length > 0;
       const hasFinal = aiTextMessages.some((item) => item.last === true) || received.some((item) => item.type === "end");
       if (hasText && hasFinal) {
-        clearTimeout(timeout);
-        ws.close();
-        resolve({
+        const responseText = aiTextMessages.map((item) => String(item.token ?? "")).join("");
+        const availabilityAnswered = /(確認します|ご案内可能|承れません|空き|候補|最短|予約可能|店舗に確認)/u.test(responseText);
+        const courseInfoOnly = /(ご予約なら希望日時|希望日時をお願いします|コース情報)/u.test(responseText) && !availabilityAnswered;
+        if (!availabilityAnswered || courseInfoOnly) {
+          finish(false, new Error(`Voice relay did not answer availability after prompt. Response: ${responseText}`));
+          return;
+        }
+
+        finish(true, {
           ok: true,
           relayUrl: redactToken(relayUrl),
           callSid,
           openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
+          responseText,
           messages: received
         });
       }
     });
 
     ws.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
+      finish(false, error);
     });
   });
 }
