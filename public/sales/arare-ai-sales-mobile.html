@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARARE AI 営業資料 | AI予約受付MVP</title>
+  <style>
+    :root {
+      --bg: #eef5f7;
+      --panel: #ffffff;
+      --panel-soft: #f7fbfb;
+      --ink: #071426;
+      --muted: #5b6b80;
+      --line: #d8e4ea;
+      --brand: #009688;
+      --brand-dark: #00796f;
+      --warn: #bf3450;
+      --ok: #087b5b;
+      --shadow: 0 10px 30px rgba(7, 20, 38, 0.08);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      padding: 0 0 88px;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.75;
+      letter-spacing: 0;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .wrap {
+      width: min(100%, 880px);
+      margin: 0 auto;
+      padding: 14px;
+    }
+
+    .hero,
+    .section {
+      margin: 14px 0;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding-top: 26px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--brand-dark);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      font-size: clamp(28px, 9vw, 46px);
+    }
+
+    h2 {
+      font-size: 24px;
+      margin-bottom: 12px;
+    }
+
+    h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .lead {
+      color: #31435a;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel-soft);
+      color: #23334a;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .pill.ok {
+      border-color: #b8eadb;
+      background: #e9fbf4;
+      color: var(--ok);
+    }
+
+    .pill.warn {
+      border-color: #ffd4dd;
+      background: #fff1f4;
+      color: var(--warn);
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel-soft);
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 16px;
+    }
+
+    .number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 10px;
+      border-radius: 999px;
+      background: #dff8f2;
+      color: var(--brand-dark);
+      font-weight: 900;
+    }
+
+    .flow {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .flow li {
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: #27394f;
+      font-weight: 700;
+    }
+
+    .quote {
+      margin-top: 12px;
+      padding: 16px;
+      border-left: 4px solid var(--brand);
+      border-radius: 12px;
+      background: #f2fbf8;
+      color: #17322f;
+      font-weight: 700;
+    }
+
+    .status-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .status {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    .status b {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .status.ok {
+      border-color: #bcebdc;
+      background: #effcf8;
+    }
+
+    .status.warn {
+      border-color: #ffd0db;
+      background: #fff4f6;
+    }
+
+    .status.neutral {
+      background: #f8fafc;
+    }
+
+    .nav {
+      position: fixed;
+      right: 10px;
+      bottom: 10px;
+      left: 10px;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      width: min(680px, calc(100% - 20px));
+      margin: 0 auto;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 12px 32px rgba(7, 20, 38, 0.16);
+      backdrop-filter: blur(14px);
+    }
+
+    .nav a {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      border-radius: 13px;
+      background: #f2f6f8;
+      color: #26364b;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .nav a.primary {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .small {
+      font-size: 13px;
+    }
+
+    .divider {
+      height: 1px;
+      margin: 16px 0;
+      background: var(--line);
+    }
+
+    @media (max-width: 640px) {
+      .wrap {
+        padding: 10px;
+      }
+
+      .hero,
+      .section {
+        padding: 18px;
+        border-radius: 16px;
+      }
+
+      .grid.two {
+        grid-template-columns: 1fr;
+      }
+
+      h2 {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero" id="top">
+      <p class="eyebrow">ARARE AI / Reservation MVP</p>
+      <h1>AI予約受付MVP<br>営業用スマホ資料</h1>
+      <p class="lead">電話AI・Web予約チャット・店舗ダッシュボード・予約管理・通知履歴を、商談中にスマホで説明しやすい順番にまとめています。</p>
+      <div class="meta">
+        <span class="pill ok">本番画面を元に作成</span>
+        <span class="pill warn">スクショ原本は非掲載</span>
+        <span class="pill">作成日 2026-06-27</span>
+      </div>
+      <p class="small">注意: このWeb版は、電話番号・顧客名・Provider IDなどの個人情報を含むスクショを公開しない前提で、画面内容を営業説明用にテキスト化しています。画像入り資料にする場合は、必ず伏せ字加工後に差し込んでください。</p>
+    </section>
+
+    <section class="section" id="overview">
+      <p class="eyebrow">Overview</p>
+      <h2>何のサービスか</h2>
+      <p>ARARE AIは、店舗の予約受付をAIで一次対応し、店舗側が確認して予約確定・通知送信まで進めるためのAI予約受付MVPです。</p>
+      <div class="quote">営業での言い方: 「AIが電話やWebから予約希望を受け、店舗が最後に確認して確定する仕組みです。完全自動で勝手に確定するのではなく、取りこぼしを減らしながら店舗判断を残せます。」</div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Target</p>
+      <h2>誰向けか</h2>
+      <div class="grid">
+        <div class="card">
+          <strong>予約電話を取りこぼしやすい店舗</strong>
+          <p>接客中、営業時間外、スタッフ不在時の電話・問い合わせを一次受付したい店舗。</p>
+        </div>
+        <div class="card">
+          <strong>予約情報が分散している店舗</strong>
+          <p>電話、Web、LINE、手入力の予約を一つの画面で確認したい店舗。</p>
+        </div>
+        <div class="card">
+          <strong>出勤・部屋・通知をまとめたい店舗</strong>
+          <p>セラピストの出勤、部屋の空き、予約通知の確認に時間がかかっている店舗。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Pain</p>
+      <h2>店舗側の課題</h2>
+      <ul class="flow">
+        <li>接客中や深夜帯の電話を取りこぼす</li>
+        <li>予約、空室、出勤、通知が別々で確認に時間がかかる</li>
+        <li>予約確定後の顧客連絡やセラピスト通知が漏れる</li>
+        <li>通話内容や通知履歴を後から追いにくい</li>
+        <li>新人スタッフが予約ルールを覚えるまで時間がかかる</li>
+      </ul>
+    </section>
+
+    <section class="section" id="features">
+      <p class="eyebrow">Features</p>
+      <h2>主要機能</h2>
+      <div class="grid two">
+        <div class="card"><strong>電話AI予約受付</strong><p>電話で予約希望を聞き取り、通話ログや予約候補として残します。</p></div>
+        <div class="card"><strong>Web予約チャット</strong><p>Web上で顧客が予約希望を入力し、AIが必要情報を整理します。</p></div>
+        <div class="card"><strong>店舗ダッシュボード</strong><p>今日の予約、要対応、空室、出勤、AI受付ログをまとめて確認できます。</p></div>
+        <div class="card"><strong>予約管理</strong><p>予約作成、編集、取消、確定、空き確認を同じ画面で行えます。</p></div>
+        <div class="card"><strong>通知/SMS</strong><p>予約確定後の顧客通知、セラピスト通知、送信履歴を確認できます。</p></div>
+        <div class="card"><strong>顧客管理</strong><p>顧客別の予約履歴、会話ログ、状態を確認できます。</p></div>
+        <div class="card"><strong>セラピスト/出勤管理</strong><p>出勤セラピスト、担当、来店準備、未送信通知を確認できます。</p></div>
+        <div class="card"><strong>ルーム空き管理</strong><p>Room A/B/Cなどの利用状況を確認し、重複予約を避けやすくします。</p></div>
+        <div class="card"><strong>通話ログ/会話ログ</strong><p>AIが何を聞いたか、予約へ紐づいたかを後から確認できます。</p></div>
+        <div class="card"><strong>管理者向け運用監視</strong><p>DB、OpenAI、Twilio、通知、電話AIの設定状態を確認します。</p></div>
+        <div class="card"><strong>権限管理</strong><p>オーナー、マネージャー、スタッフの権限を分けて管理します。</p></div>
+        <div class="card"><strong>KnowledgeBase/FAQ/NG回答</strong><p>AIが参照する店舗情報、よくある質問、答えない内容を管理します。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="demo">
+      <p class="eyebrow">Demo Route</p>
+      <h2>デモで見せる順番</h2>
+      <div class="grid">
+        <div class="card"><span class="number">1</span><strong>ホーム/役割別ハブ</strong><p>全体の流れを説明します。店舗、セラピスト、顧客、電話AI、Web Chatが分かれていることを見せます。</p></div>
+        <div class="card"><span class="number">2</span><strong>店舗ダッシュボード</strong><p>今日の予約、要対応、空室、出勤、AI受付ログを一画面で確認できることを見せます。</p></div>
+        <div class="card"><span class="number">3</span><strong>電話AIログ</strong><p>実通話の内容、通話時間、予約への紐づき、要対応/確定済み状態を確認します。</p></div>
+        <div class="card"><span class="number">4</span><strong>予約作成/編集</strong><p>空き確認をしてから予約を作成し、担当・部屋・コース・状態を店舗側で確認できます。</p></div>
+        <div class="card"><span class="number">5</span><strong>通知履歴</strong><p>顧客通知、セラピスト通知、送信済み/未送信/失敗を確認し、証跡が残ることを説明します。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="screens">
+      <p class="eyebrow">Screens</p>
+      <h2>画面ごとの説明</h2>
+      <div class="grid">
+        <div class="card"><strong>店舗ダッシュボード</strong><p>店舗スタッフが毎日見る画面。今日の予約、空き部屋、出勤、AI受付の要対応を確認します。</p></div>
+        <div class="card"><strong>電話AI画面</strong><p>AI受付番号、Webhook、Relay URL、通話ログを確認します。営業では「電話の一次受付履歴が残る画面」と説明します。</p></div>
+        <div class="card"><strong>予約一覧</strong><p>今後の予約、確定状態、顧客名、担当、部屋、料金を確認します。</p></div>
+        <div class="card"><strong>予約作成/編集</strong><p>顧客名、電話番号、日時、コース、セラピスト、部屋、状態、受付経路を入力します。</p></div>
+        <div class="card"><strong>通知履歴</strong><p>送信済み、未送信、失敗、通知本文、通知IDを確認します。</p></div>
+        <div class="card"><strong>顧客管理</strong><p>顧客ごとの予約履歴や会話履歴を確認する画面です。</p></div>
+        <div class="card"><strong>セラピスト画面</strong><p>出勤登録、担当予約、未送信通知、来店準備を確認します。</p></div>
+        <div class="card"><strong>管理UI/KnowledgeBase</strong><p>店舗情報、予約ルール、FAQ、NG回答を登録し、AI回答の前提を整えます。</p></div>
+        <div class="card"><strong>導入フォーム</strong><p>店舗基本情報、コース、セラピスト、部屋、LINE IDなどを登録します。</p></div>
+        <div class="card"><strong>運用監視</strong><p>DB、OpenAI、Twilio、SMS、Clerkなどの設定状態とエラーを確認します。</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="talk">
+      <p class="eyebrow">Talk Script</p>
+      <h2>商談での説明例</h2>
+      <div class="quote">「このシステムは、AIが電話やWebから予約希望を受け、店舗側で確認して確定する予約受付サポートです。接客中や深夜の取りこぼしを減らし、予約・空室・出勤・通知履歴を一つの画面で確認できるようにします。」</div>
+      <div class="quote">「AIが全部を勝手に決めるのではなく、店舗が確認してから確定できます。なので、現場の判断を残しながら、受付の負担を減らせます。」</div>
+    </section>
+
+    <section class="section" id="faq">
+      <p class="eyebrow">FAQ</p>
+      <h2>よくある質問</h2>
+      <div class="grid">
+        <div class="card"><strong>AIが勝手に予約確定しますか？</strong><p>現時点の説明では、AIは一次受付と情報整理を行い、店舗側が確認して確定する設計として案内してください。</p></div>
+        <div class="card"><strong>電話もWebも使えますか？</strong><p>電話AIとWeb予約チャットの画面は用意されています。導入店舗で使うには、電話番号、Twilio、OpenAI、店舗情報などの設定が必要です。</p></div>
+        <div class="card"><strong>SMSは必ず届きますか？</strong><p>送信ログは確認できますが、実端末到達は通信環境や番号状態にも依存します。「送信履歴を確認できる」と説明してください。</p></div>
+        <div class="card"><strong>LINE連携はできますか？</strong><p>画面と設計上は連携前提の構成ですが、導入店舗ごとのLINE公式アカウント設定が必要です。未設定の場合は断定しないでください。</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Benefits</p>
+      <h2>導入メリット</h2>
+      <div class="grid two">
+        <div class="card"><strong>店舗側メリット</strong><p>予約の取りこぼし削減、確認作業の短縮、通知漏れの防止、通話内容の証跡化。</p></div>
+        <div class="card"><strong>管理者側メリット</strong><p>店舗別の設定、権限、通知、電話AI、運用状態を管理しやすくなります。</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Before Start</p>
+      <h2>導入前に必要なもの</h2>
+      <ul class="flow">
+        <li>店舗名、住所、営業時間、電話番号</li>
+        <li>コース名、時間、料金</li>
+        <li>セラピスト名、出勤可能時間、担当ルール</li>
+        <li>部屋数、部屋名、予約可能時間</li>
+        <li>通知先、SMS/LINE運用方針</li>
+        <li>AIに答えさせない内容、NG回答ルール</li>
+      </ul>
+    </section>
+
+    <section class="section" id="status">
+      <p class="eyebrow">Status</p>
+      <h2>確認状況</h2>
+      <div class="status-list">
+        <div class="status ok">
+          <b>確認済み</b>
+          <p>提供スクショ上では、スマホ版の店舗ダッシュボード、電話AIログ、通知履歴、予約作成/編集、予約一覧、ホーム/役割別ハブの表示を確認しています。</p>
+        </div>
+        <div class="status neutral">
+          <b>実装上は確認できるが、営業時に断定を避ける項目</b>
+          <p>LINE連携、SMS実端末到達、店舗ごとの電話番号設定、AI回答品質は、導入店舗ごとの外部設定や登録データに依存します。</p>
+        </div>
+        <div class="status warn">
+          <b>未確認/要確認</b>
+          <p>正式料金、導入店舗ごとのLINE公式アカウント、顧客端末でのSMS到達、画像入り営業資料の伏せ字加工は別途確認が必要です。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="ng">
+      <p class="eyebrow">NG Words</p>
+      <h2>言ってはいけない表現</h2>
+      <div class="grid">
+        <div class="card"><strong>NG: AIが完全自動で全部予約確定します</strong><p>安全な表現: AIが一次受付し、店舗側が確認して確定します。</p></div>
+        <div class="card"><strong>NG: SMSは必ず届きます</strong><p>安全な表現: 送信履歴を確認できます。実到達は通信環境にも依存します。</p></div>
+        <div class="card"><strong>NG: LINEもすぐ使えます</strong><p>安全な表現: LINE連携は導入店舗ごとの公式アカウント設定が必要です。</p></div>
+        <div class="card"><strong>NG: AIが何でも答えます</strong><p>安全な表現: 店舗情報、FAQ、NG回答に沿って回答範囲を制御します。</p></div>
+        <div class="card"><strong>NG: グレーな内容にも対応できます</strong><p>安全な表現: 法令・店舗ルール・NG回答に反する内容は回答しない運用です。</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <p class="eyebrow">Next Action</p>
+      <h2>次にやること</h2>
+      <ul class="flow">
+        <li>このスマホ資料を営業担当に共有</li>
+        <li>画像入り資料にする場合はスクショを伏せ字加工</li>
+        <li>料金、初期費用、月額、従量課金の正式条件を確定</li>
+        <li>導入店舗ごとの電話番号、LINE、通知先、店舗情報を登録</li>
+      </ul>
+    </section>
+  </main>
+
+  <nav class="nav" aria-label="ページ内ナビ">
+    <a href="#overview" class="primary">概要</a>
+    <a href="#features">機能</a>
+    <a href="#demo">デモ</a>
+    <a href="#faq">FAQ</a>
+    <a href="#ng">NG</a>
+  </nav>
+</body>
+</html>
