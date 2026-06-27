@@ -156,7 +156,28 @@ const CURRENT_OPERATIONS_CUTOVER = Date.parse("2026-06-09T18:30:00.000Z");
 const OPERATIONAL_REVIEW_WINDOW_MS = 36 * 60 * 60 * 1000;
 const OPERATIONAL_RESEND_WINDOW_MS = 72 * 60 * 60 * 1000;
 const resendableNotificationTypes = new Set(["RESERVATION_CONFIRMED", "RESERVATION_CHANGED", "RESERVATION_CANCELLED", "REMINDER_PREVIOUS_DAY", "REMINDER_SAME_DAY"]);
-type CallLogItem = { id: string; reservationId?: string | null; time?: string; phoneNumber?: string; status?: string; requiredReview?: boolean; reviewNotes?: string; summary?: string };
+type CallLogItem = {
+  id: string;
+  reservationId?: string | null;
+  time?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  phoneNumber?: string;
+  status?: string;
+  requiredReview?: boolean;
+  reviewNotes?: string;
+  summary?: string;
+  durationSeconds?: number | null;
+  reservation?: {
+    id: string;
+    rawStatus?: string;
+    status?: string;
+    customer?: string;
+    course?: string;
+    date?: string;
+    time?: string;
+  } | null;
+};
 
 const holdStatuses = new Set(["TENTATIVE", "PENDING", "PENDING_CONFIRMATION", "HOLD", "仮予約"]);
 const confirmedStatuses = new Set(["CONFIRMED", "VISITED", "確定", "来店済み"]);
@@ -744,7 +765,7 @@ function OperationalEvidencePanel({
             <span className="font-black text-red-700">{callLog.time}</span>
             <span className="min-w-0">
               <span className="block truncate font-black">電話AI要確認</span>
-              <span className="block truncate text-[10px] font-bold text-red-700">{callLog.phoneNumber ?? "番号なし"} / {callLog.summary || callLog.reviewNotes || "予約未作成の可能性"}</span>
+              <span className="block truncate text-[10px] font-bold text-red-700">{callLog.phoneNumber ?? "番号なし"} / {callLogReviewSummary(callLog)}</span>
             </span>
             <Pill text="確認" tone="red" />
           </Link>
@@ -1036,7 +1057,7 @@ function MobileDashboardBody({ reservations, conversations, notifications, revie
             <Link key={callLog.id} href="/phone-ai#call-logs" className="block rounded-lg border border-red-100 bg-red-50 p-2">
               <div className="flex justify-between gap-2 text-[11px] font-black text-red-700"><span>電話AI要確認</span><span>{callLog.time}</span></div>
               <div className="truncate text-sm font-black">{callLog.phoneNumber ?? "番号なし"}</div>
-              <p className="line-clamp-1 text-xs font-bold text-red-700">{callLog.summary || callLog.reviewNotes || "予約未作成の可能性があります"}</p>
+              <p className="line-clamp-1 text-xs font-bold text-red-700">{callLogReviewSummary(callLog)}</p>
               <div className="mt-1 text-[10px] font-black text-red-700">タップして通話ログ確認</div>
             </Link>
           ))}
@@ -1724,10 +1745,31 @@ function needsCallReview(item: CallLogItem) {
   const status = item.status ?? "";
   const reviewNotes = item.reviewNotes ?? "";
   if (reviewNotes.includes("[admin-reviewed]") || reviewNotes.includes("管理画面で確認済み") || reviewNotes.includes("邂｡逅・判")) return false;
+  if (!isWithinOperationalCallReviewWindow(item)) return false;
+  if (isResolvedLinkedReservation(item)) return false;
   if (item.requiredReview) return true;
   if (status === "ESCALATED" || status === "RECEIVED" || status === "TRANSCRIBED") return true;
   if (!item.reservationId && status !== "HOLD_CREATED" && status !== "SUMMARIZED") return true;
   return false;
+}
+
+function callLogReviewSummary(item: CallLogItem) {
+  const reservation = item.reservation;
+  if (reservation) {
+    return `予約${reservation.status ?? reservation.rawStatus ?? "状態未確認"}: ${reservation.time ?? "--:--"} ${reservation.customer ?? "顧客名なし"} / ${reservation.course ?? "コース未設定"}`;
+  }
+  return item.summary || item.reviewNotes || "予約未作成の可能性があります";
+}
+
+function isResolvedLinkedReservation(item: CallLogItem) {
+  const status = item.reservation?.rawStatus ?? "";
+  return ["CONFIRMED", "VISITED", "CANCELLED", "NO_SHOW"].includes(status);
+}
+
+function isWithinOperationalCallReviewWindow(item: CallLogItem) {
+  const timestamp = Date.parse(item.createdAt ?? item.updatedAt ?? "");
+  if (Number.isNaN(timestamp)) return false;
+  return Date.now() - timestamp <= OPERATIONAL_REVIEW_WINDOW_MS;
 }
 
 function latestSuccessfulNotificationTimestamp(items: NotificationItem[]) {

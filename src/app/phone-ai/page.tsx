@@ -19,6 +19,14 @@ type CallLogItem = {
   status: string;
   aiSummary?: string | null;
   createdAt: string;
+  updatedAt?: string;
+  reservation?: {
+    id: string;
+    status: string;
+    customer?: { name?: string | null } | null;
+    course?: { name?: string | null } | null;
+    startsAt?: string;
+  } | null;
 };
 
 type RoutingMode = "ALWAYS_AI" | "AFTER_HOURS_AI" | "BUSY_OR_NO_ANSWER_AI" | "MANUAL_ONLY";
@@ -380,8 +388,8 @@ export default function PhoneAiSettingsPage() {
                           <span className="font-black text-red-700">{callLog.phoneNumber || "番号なし"}</span>
                           <span className="rounded-full bg-red-100 px-2 py-1 font-black text-red-700">{callReviewReason(callLog)}</span>
                         </div>
-                        <div className="mt-1 font-bold text-slate-500">{callLog.createdAt}</div>
-                        <p className="mt-1 line-clamp-2 font-bold text-red-700">{callLog.aiSummary || callLog.reviewNotes || "内容未取得。折り返し確認してください。"}</p>
+                        <div className="mt-1 font-bold text-slate-500">{formatCallLogDate(callLog.createdAt)}</div>
+                        <p className="mt-1 line-clamp-2 font-bold text-red-700">{callLogSummaryText(callLog)}</p>
                         <button
                           type="button"
                           onClick={() => void markCallLogReviewed(callLog)}
@@ -409,10 +417,11 @@ export default function PhoneAiSettingsPage() {
                       <span>{formatCallLogDate(callLog.createdAt)}</span>
                       {callLog.durationSeconds ? <span>通話: {formatDuration(callLog.durationSeconds)}</span> : null}
                       {callLog.reservationId ? <span>予約ID: {callLog.reservationId.slice(0, 8)}</span> : null}
+                      {callLog.reservation ? <span>{linkedReservationLabel(callLog.reservation)}</span> : null}
                       {callLog.requiredReview ? <span className="text-red-700">要確認: {callReviewReason(callLog)}</span> : null}
                     </div>
                     <p className="mt-2 line-clamp-3 text-sm font-bold leading-6 text-slate-700">
-                      {callLog.aiSummary || callLog.reviewNotes || "内容未取得。折り返し確認してください。"}
+                      {callLogSummaryText(callLog)}
                     </p>
                     {(callLog.aiSummary || callLog.reviewNotes) ? (
                       <details className="mt-2 rounded-md bg-[#f8fbfc] px-3 py-2 text-sm">
@@ -645,6 +654,7 @@ function TextField({
 function isReviewableCallLog(callLog: CallLogItem) {
   if (isAdminReviewedCallLog(callLog)) return false;
   if (!isWithinOperationalCallReviewWindow(callLog)) return false;
+  if (isResolvedLinkedReservation(callLog)) return false;
   return Boolean(callLog.requiredReview) || ["RECEIVED", "TRANSCRIBED", "ESCALATED"].includes(callLog.status);
 }
 
@@ -675,6 +685,31 @@ function formatDuration(seconds: number) {
   return `${minutes}分${String(rest).padStart(2, "0")}秒`;
 }
 
+function isResolvedLinkedReservation(callLog: CallLogItem) {
+  return ["CONFIRMED", "VISITED", "CANCELLED", "NO_SHOW"].includes(callLog.reservation?.status ?? "");
+}
+
+function linkedReservationLabel(reservation: NonNullable<CallLogItem["reservation"]>) {
+  const statusLabels: Record<string, string> = {
+    TENTATIVE: "仮予約",
+    CONFIRMED: "確定済み",
+    VISITED: "来店済み",
+    CANCELLED: "取消済み",
+    NO_SHOW: "無断キャンセル"
+  };
+  const status = statusLabels[reservation.status] ?? reservation.status;
+  const time = reservation.startsAt ? formatCallLogTime(reservation.startsAt) : "--:--";
+  const customer = reservation.customer?.name ?? "顧客名なし";
+  const course = reservation.course?.name ?? "コース未設定";
+  return `リンク予約: ${status} / ${time} ${customer} / ${course}`;
+}
+
+function callLogSummaryText(callLog: CallLogItem) {
+  const base = callLog.aiSummary || callLog.reviewNotes || "内容未取得。折り返し確認してください。";
+  if (!callLog.reservation) return base;
+  return `${linkedReservationLabel(callLog.reservation)}\n${base}`;
+}
+
 function isAdminReviewedCallLog(callLog: CallLogItem) {
   const notes = callLog.reviewNotes ?? "";
   return notes.includes(ADMIN_REVIEWED_MARKER) || notes.includes("管理画面で確認済み") || notes.includes("邂｡逅・判");
@@ -684,6 +719,12 @@ function isWithinOperationalCallReviewWindow(callLog: CallLogItem) {
   const timestamp = Date.parse(callLog.createdAt);
   if (Number.isNaN(timestamp)) return false;
   return Date.now() - timestamp <= OPERATIONAL_CALL_REVIEW_WINDOW_MS;
+}
+
+function formatCallLogTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
 }
 
 function formatReviewNotes(notes: string) {

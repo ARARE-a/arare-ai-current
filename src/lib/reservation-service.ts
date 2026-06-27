@@ -616,6 +616,11 @@ export async function approveReservation(reservationId: string, actorOrOptions?:
       data: { approvedAt: new Date() }
     });
 
+    await tx.callLog.updateMany({
+      where: { storeId: updated.storeId, reservationId, requiredReview: true },
+      data: { requiredReview: false }
+    });
+
     const customerChannels = new Set<ConversationChannel>([
       ConversationChannel.PHONE,
       updated.source !== ConversationChannel.PHONE ? updated.source : null

@@ -95,7 +95,8 @@ export async function GET() {
       prisma.room.findMany({ where: { storeId: storeId, isActive: true }, orderBy: { name: "asc" } }),
       prisma.callLog.findMany({
         where: { storeId: storeId, twilioCallSid: { not: { startsWith: "CA_REGRESSION_" } } },
-        orderBy: { updatedAt: "desc" },
+        include: { reservation: { include: { customer: true, course: true } } },
+        orderBy: { createdAt: "desc" },
         take: 20
       }),
       prisma.reservation.findMany({
@@ -246,12 +247,26 @@ export async function GET() {
       callLogs: callLogs.map((item) => ({
         id: item.id,
         reservationId: item.reservationId,
-        time: timeText(item.updatedAt),
+        time: timeText(item.createdAt),
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
         phoneNumber: item.phoneNumber ?? "-",
         status: item.status,
         requiredReview: item.requiredReview,
         reviewNotes: safeDisplayText(item.reviewNotes ?? "", ""),
-        summary: safeDisplayText(item.aiSummary ?? item.reviewNotes ?? item.transcript ?? "", "内容未取得。折り返し確認してください。")
+        summary: safeDisplayText(item.aiSummary ?? item.reviewNotes ?? item.transcript ?? "", "内容未取得。折り返し確認してください。"),
+        durationSeconds: item.durationSeconds,
+        reservation: item.reservation
+          ? {
+              id: item.reservation.id,
+              rawStatus: item.reservation.status,
+              status: statusLabel(item.reservation.status),
+              customer: safeDisplayText(item.reservation.customer.name, "旧テスト顧客"),
+              course: safeDisplayText(item.reservation.course.name, "旧テストコース"),
+              date: dateText(item.reservation.startsAt),
+              time: timeText(item.reservation.startsAt)
+            }
+          : null
       })),
       auditLogs: auditLogs.map((item) => ({
         id: item.id,
