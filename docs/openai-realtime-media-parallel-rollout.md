@@ -52,6 +52,7 @@ Realtime切替時は旧経路をTwilioのVoice Fallback URLへ残す。Realtime�
 npm run verify:realtime-media
 npm run verify:voice-usage-meter
 npm run verify:twilio-signature
+npm run verify:realtime-production-media
 npm run verify:voice-relay
 npm run verify:final
 ```

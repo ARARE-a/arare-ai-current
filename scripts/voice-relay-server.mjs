@@ -989,19 +989,21 @@ async function handleTwilioVoice(request, response, provider = "conversation_rel
     );
   }
 
-  await prisma.callLog
-    .create({
-      data: {
-        storeId: route.storeId,
-        storePhoneSettingId: route.settingId,
-        phoneNumber: from,
-        toNumber: to,
-        twilioCallSid: callSid,
-        status: "RECEIVED",
-        requiredReview: true
-      }
-    })
-    .catch(() => null);
+  if (!isRegressionCall(callSid)) {
+    await prisma.callLog
+      .create({
+        data: {
+          storeId: route.storeId,
+          storePhoneSettingId: route.settingId,
+          phoneNumber: from,
+          toNumber: to,
+          twilioCallSid: callSid,
+          status: "RECEIVED",
+          requiredReview: true
+        }
+      })
+      .catch(() => null);
+  }
 
   if (!route.voiceAiEnabled || route.routingMode === "MANUAL_ONLY") {
     logRelay("twilio_voice_manual_or_disabled", {
