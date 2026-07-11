@@ -67,7 +67,7 @@ const speechModel = normalizeSpeechModel(transcriptionProvider, process.env.VOIC
 const sayVoice =
   process.env.VOICE_RELAY_SAY_VOICE ??
   (ttsProvider === "Google" ? `Google.${ttsVoice}` : ttsProvider === "Amazon" ? `Polly.${ttsVoice}` : ttsVoice);
-const speechTimeoutMs = process.env.VOICE_RELAY_SPEECH_TIMEOUT_MS ?? "650";
+const speechTimeoutMs = process.env.VOICE_RELAY_SPEECH_TIMEOUT_MS ?? "1200";
 const ttsSpeechRate = normalizeSpeechRate(process.env.VOICE_RELAY_TTS_RATE ?? "94%");
 const configuredNoPromptFirstFallbackMs = Number(process.env.VOICE_RELAY_NO_PROMPT_FIRST_FALLBACK_MS ?? 14000);
 const noPromptFirstFallbackMs = Number.isFinite(configuredNoPromptFirstFallbackMs)
@@ -253,6 +253,7 @@ const server = http.createServer(async (request, response) => {
         openAlternativeNoAvailabilityReplyReady: true,
         phoneMismatchConfirmationPriorityReady: true,
         compactPhoneConversationReady: true,
+        callerPhoneConfirmationReady: true,
         welcomeGreetingLength: VOICE_RELAY_TWIML_WELCOME_GREETING.length,
         initialListeningGreetingLength: VOICE_RELAY_INITIAL_LISTENING_GREETING.length,
         endAfterTokensPlayedReady: true,
@@ -297,6 +298,9 @@ const server = http.createServer(async (request, response) => {
         ttsSpeechRate,
         transcriptionProvider,
         speechModel,
+        telephonySpeechModelReady: transcriptionProvider === "Google" && speechModel === "telephony",
+        conversationRelaySpeechTimeoutMs: Number(speechTimeoutMs),
+        conversationRelayInterruptSensitivity: "medium",
         noPromptFirstFallbackMs,
         noPromptTerminalFallbackMs,
         activeSessions: activeSessions.size,
@@ -565,6 +569,7 @@ wss.on("connection", (twilioSocket) => {
       session.callSid = stringValue(message.callSid ?? custom.callSid ?? custom.callReference);
       session.from = stringValue(message.from ?? custom.fromNumber);
       session.to = stringValue(message.to ?? custom.toNumber);
+      seedCallerPhoneCandidate(session);
       session.publicBaseUrl = stringValue(custom.voiceRelayBaseUrl ?? custom.publicBaseUrl);
       const explicitStoreId = stringValue(custom.storeId ?? message.storeId);
       const resolvedRoute = explicitStoreId
@@ -704,6 +709,7 @@ mediaWss.on("connection", (twilioSocket) => {
       session.callSid = stringValue(message.start?.callSid ?? custom.callSid ?? custom.callReference);
       session.from = stringValue(custom.fromNumber);
       session.to = stringValue(custom.toNumber);
+      seedCallerPhoneCandidate(session);
       session.publicBaseUrl = stringValue(custom.voiceRelayBaseUrl ?? custom.publicBaseUrl);
       session.storeId = stringValue(custom.storeId);
       session.storePhoneSettingId = stringValue(custom.storePhoneSettingId ?? custom.settingId);
@@ -1241,15 +1247,14 @@ async function handleTwilioConnectStatus(request, response) {
       })
       .catch(() => null);
 
-    const nextRequiredReview = Boolean(handoffData) || Boolean(existingCallLog?.requiredReview);
+    const nextRequiredReview =
+      Boolean(handoffData) || Boolean(existingCallLog?.requiredReview) || existingCallLog?.status === "ESCALATED";
     shouldPlayFallback = nextRequiredReview && !existingCallLog?.reservationId;
-    const nextStatus = handoffData
+    const nextStatus = nextRequiredReview
       ? "ESCALATED"
       : existingCallLog?.reservationId
         ? "HOLD_CREATED"
-        : nextRequiredReview
-          ? "ESCALATED"
-          : "SUMMARIZED";
+        : existingCallLog?.status ?? "SUMMARIZED";
     const nextReviewNotes = mergeReviewNotes(existingCallLog?.reviewNotes, reviewNotes);
 
     if (existingCallLog) {
@@ -2245,10 +2250,30 @@ function buildCallerPhoneMismatch(session, heardPhone) {
   };
 }
 
+function seedCallerPhoneCandidate(session) {
+  const callerPhone = normalizePhoneForComparison(session?.from);
+  if (!isLikelyCustomerPhone(callerPhone)) return;
+  const draft = session.reservationDraft ?? createReservationDraft();
+  session.reservationDraft = draft;
+  draft.callerPhoneCandidate = formatPhoneWithHyphen(callerPhone);
+  draft.callerPhoneCandidateRejected = false;
+}
+
+function buildCallerPhoneCandidateQuestion(draft) {
+  const candidate = normalizePhoneForComparison(draft?.callerPhoneCandidate);
+  if (!isLikelyCustomerPhone(candidate) || draft?.callerPhoneCandidateRejected) return "";
+  return `ショートメッセージは、今おかけの番号、下4桁${phoneLast4(candidate)}へ送ってよろしいですか？`;
+}
+
+function clearCallerPhoneCandidate(draft, rejected = false) {
+  draft.callerPhoneCandidate = undefined;
+  draft.callerPhoneCandidateRejected = rejected;
+}
+
 function setDraftPhoneFromCallerInput(session, draft, phone) {
   const normalized = normalizePhoneForComparison(phone);
   draft.phone = formatPhoneWithHyphen(normalized || phone);
-  const mismatch = buildCallerPhoneMismatch(session, normalized);
+  const mismatch = draft.callerPhoneCandidateRejected ? null : buildCallerPhoneMismatch(session, normalized);
   if (mismatch) {
     draft.phoneMismatchConfirmation = mismatch;
     draft.awaitingField = "phoneMismatchConfirmation";
@@ -2363,7 +2388,17 @@ function mergePhoneDigits(left, right) {
   const current = normalizePhoneDigits(right);
   if (!previous) return current ? [current] : [];
   if (!current) return previous ? [previous] : [];
-  const candidates = [previous + current, current];
+  const candidates = [previous + current, previous, current];
+
+  if (/^(?:070|080|090)/.test(previous) && previous.length + current.length > 11) {
+    const excess = previous.length + current.length - 11;
+    for (let removedFromPrevious = excess; removedFromPrevious >= 0; removedFromPrevious -= 1) {
+      const removedFromCurrent = excess - removedFromPrevious;
+      candidates.push(
+        previous.slice(0, previous.length - removedFromPrevious) + current.slice(removedFromCurrent)
+      );
+    }
+  }
 
   let overlap = 0;
   const maxOverlap = Math.min(previous.length, current.length);
@@ -2427,7 +2462,11 @@ function mergeSplitPhoneNumber(session, callerText) {
 
   const previous = session.pendingPhoneDigits || "";
   const candidates = mergePhoneDigits(previous, digits);
-  const complete = candidates.find(isLikelyCustomerPhone);
+  const completeCandidates = candidates.filter(isLikelyCustomerPhone);
+  const callerPhone = normalizePhoneForComparison(session.from);
+  const complete =
+    (!draft.callerPhoneCandidateRejected && completeCandidates.find((candidate) => candidate === callerPhone)) ||
+    completeCandidates[0];
   if (complete) {
     setDraftPhoneFromCallerInput(session, draft, complete);
     session.pendingPhoneDigits = "";
@@ -4483,6 +4522,11 @@ function buildShortNextQuestion(draft, availableCourses = draft.availableCourses
     return "\u304a\u540d\u524d\u3092\u304a\u9858\u3044\u3057\u307e\u3059\u3002\u82d7\u5b57\u3060\u3051\u3067\u3082\u5927\u4e08\u592b\u3067\u3059\u3002";
   }
   if (nextField === "phone") {
+    const callerPhoneQuestion = buildCallerPhoneCandidateQuestion(draft);
+    if (callerPhoneQuestion) {
+      draft.awaitingField = "callerPhoneConfirmation";
+      return callerPhoneQuestion;
+    }
     draft.awaitingField = "phone";
     return "\u304a\u96fb\u8a71\u756a\u53f7\u3092\u304a\u9858\u3044\u3057\u307e\u3059\u3002";
   }
@@ -4757,6 +4801,8 @@ function createReservationDraft() {
     suggestedNominationIntent: undefined,
     customerName: undefined,
     phone: undefined,
+    callerPhoneCandidate: undefined,
+    callerPhoneCandidateRejected: false,
     phoneMismatchConfirmation: undefined,
     firstVisit: undefined,
     attentionConfirmed: undefined,
@@ -5260,7 +5306,9 @@ function buildDateTimeParseLog(draft, parsedDate, parsedTime, extra = {}) {
 }
 
 function normalizeDateTimeDigits(value) {
-  return String(value ?? "").replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  return String(value ?? "")
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/(^|[^\d])([0-2]?\d)とか(?=(?:いただ|お願い|予約|空|入|希望|$))/gu, "$1$2時から");
 }
 
 function isPhoneNumberDominantText(value) {
@@ -6677,7 +6725,7 @@ function applyJapaneseSpeechPronunciationHints(value) {
     .replace(/S寄り/g, "エス寄り")
     .replace(/M寄り/g, "エム寄り")
     .replace(/夜帯/g, "夜の時間帯")
-    .replace(/末尾\s*([0-9０-９]{4})/g, (_, digits) => "下4桁、" + normalizeSpokenDigits(digits))
+    .replace(/(?:末尾|下4桁[、,]?)\s*([0-9０-９]{4})/g, (_, digits) => "下4桁、" + normalizeSpokenDigits(digits))
     .replace(/美咲さん/g, "みさきさん")
     .replace(/美咲/g, "みさき")
     .replace(/清澄せいらさん/g, "せいらさん")
@@ -6912,6 +6960,42 @@ async function handlePriorityReservationState(session, callerText, context) {
   if (!draft || draft.completed || draft.cancelled) return "";
   const field = draft.awaitingField;
 
+  if (field === "callerPhoneConfirmation") {
+    const candidate = normalizePhoneForComparison(draft.callerPhoneCandidate);
+    if (!isLikelyCustomerPhone(candidate)) {
+      draft.awaitingField = "phone";
+      return "ショートメッセージを送る電話番号を、最初のゼロから11桁でお願いします。";
+    }
+    const explicitPhone = extractPhoneNumber(callerText);
+    if (explicitPhone) {
+      resetStatePromptAttempts(session, "callerPhoneConfirmation");
+      clearPhoneMismatch(draft, normalizePhoneForComparison(explicitPhone));
+      clearCallerPhoneCandidate(draft, normalizePhoneForComparison(explicitPhone) !== candidate);
+      return continueAfterPhoneConfirmed(draft);
+    }
+    if (isPhoneCallerNumberAffirmative(callerText) || isNaturalAffirmative(callerText)) {
+      resetStatePromptAttempts(session, "callerPhoneConfirmation");
+      clearPhoneMismatch(draft, candidate);
+      clearCallerPhoneCandidate(draft, false);
+      return continueAfterPhoneConfirmed(draft);
+    }
+    if (/(違う|ちがう|いいえ|別の番号|ほかの番号|他の番号)/u.test(normalizeJapaneseSpeech(callerText))) {
+      resetStatePromptAttempts(session, "callerPhoneConfirmation");
+      draft.phone = undefined;
+      draft.phoneMismatchConfirmation = undefined;
+      clearCallerPhoneCandidate(draft, true);
+      draft.awaitingField = "phone";
+      session.pendingPhoneDigits = "";
+      return "承知しました。ショートメッセージを送る別の電話番号を、最初のゼロから11桁でお願いします。";
+    }
+    return buildStateRetryReply(
+      session,
+      "callerPhoneConfirmation",
+      `${buildCallerPhoneCandidateQuestion(draft)}よろしければ「はい」、違う場合は「違う」とお答えください。`,
+      "今おかけの番号へ送る場合は「はい」、別の番号へ送る場合は「違う」とお答えください。"
+    );
+  }
+
   if (field === "phoneMismatchConfirmation" || draft.phoneMismatchConfirmation) {
     return handlePhoneMismatchConfirmation(session, callerText);
   }
@@ -6952,19 +7036,19 @@ async function handlePriorityReservationState(session, callerText, context) {
   }
 
   if (field === "phone" && canCollectCustomerInfo(draft)) {
-    const phone = extractPhoneNumber(callerText);
-    if (!phone) {
-      return buildStateRetryReply(
-        session,
-        "phone",
-        "ショートメッセージを送る電話番号を、11桁でゆっくりお願いします。",
-        "電話番号を、最初のゼロから11桁でお願いします。"
-      );
+    mergeSplitPhoneNumber(session, callerText);
+    if (draft.phone) {
+      resetStatePromptAttempts(session, "phone");
+      if (draft.phoneMismatchConfirmation) return consumePhoneMismatchQuestion(draft);
+      return continueAfterPhoneConfirmed(draft);
     }
-    resetStatePromptAttempts(session, "phone");
-    setDraftPhoneFromCallerInput(session, draft, phone);
-    if (draft.phoneMismatchConfirmation) return consumePhoneMismatchQuestion(draft);
-    return continueAfterPhoneConfirmed(draft);
+    if (session.pendingPhoneDigits) return buildIncompletePhoneReply(session);
+    return buildStateRetryReply(
+      session,
+      "phone",
+      "ショートメッセージを送る電話番号を、11桁でゆっくりお願いします。",
+      "電話番号を、最初のゼロから11桁でお願いします。"
+    );
   }
 
   if (field === "course") {
@@ -7451,7 +7535,7 @@ function normalizeTranscriptionProvider(value) {
 function normalizeSpeechModel(provider, value) {
   const model = String(value ?? "").trim();
   if (model) return model;
-  return provider === "Deepgram" ? "nova-2" : "long";
+  return provider === "Deepgram" ? "nova-2" : "telephony";
 }
 
 function isRegressionCall(sessionOrCallSid) {
@@ -7809,6 +7893,20 @@ function conversationRelayXml(input) {
     "場所",
     "コース",
     "セラピスト",
+    "佐藤",
+    "鈴木",
+    "高橋",
+    "田中",
+    "伊藤",
+    "渡辺",
+    "山本",
+    "中村",
+    "小林",
+    "加藤",
+    "吉田",
+    "山田",
+    "今日の23時から",
+    "明日の20時から",
     "おすすめ",
     "変更",
     "キャンセル",
@@ -7836,7 +7934,7 @@ function conversationRelayXml(input) {
     '      transcriptionProvider="' + escapeXml(transcriptionProvider) + '"',
     '      speechModel="' + escapeXml(speechModel) + '"',
     '      interruptible="any"',
-    '      interruptSensitivity="high"',
+    '      interruptSensitivity="medium"',
     '      reportInputDuringAgentSpeech="speech"',
     '      speechTimeout="' + escapeXml(speechTimeoutMs) + '"',
     '      dtmfDetection="true"',

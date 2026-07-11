@@ -46,3 +46,7 @@ services:
         value: Takumi-Neural
       - key: VOICE_RELAY_TRANSCRIPTION_PROVIDER
         value: Google
+      - key: VOICE_RELAY_SPEECH_MODEL
+        value: telephony
+      - key: VOICE_RELAY_SPEECH_TIMEOUT_MS
+        value: "1200"

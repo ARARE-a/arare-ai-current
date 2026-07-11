@@ -27,6 +27,9 @@ assert.equal(relay.attributes.ttsLanguage, "ja-JP", "TTS language must be ja-JP"
 assert.equal(relay.attributes.ttsProvider, "Amazon", "Production Japanese route must use Amazon TTS");
 assert.equal(relay.attributes.voice, "Takumi-Neural", "Production Japanese route must use Takumi-Neural");
 assert.equal(relay.attributes.transcriptionProvider, "Google", "Production Japanese route must use Google STT");
+assert.equal(relay.attributes.speechModel, "telephony", "Production Japanese route must use Google's telephony model");
+assert.equal(relay.attributes.speechTimeout, "1200", "Production Japanese route must keep short pauses inside one turn");
+assert.equal(relay.attributes.interruptSensitivity, "medium", "Production Japanese route must avoid false high-sensitivity interrupts");
 assert.ok(relay.parameters.storeId, "Voice webhook must bind the call to a store");
 
 const signature = twilio.getExpectedTwilioSignature(authToken, relay.attributes.url, {});
@@ -41,17 +44,20 @@ try {
   const greeting = await conversation.nextResponse();
   record("initial_greeting", "(setup)", greeting, /(AI|受付|予約|お電話)/u);
 
-  const availability = await conversation.prompt("明日の20時から60分で予約したいです");
-  record("availability_to_name", "明日の20時から60分で予約したいです", availability, /(お名前|名字)/u);
+  const timeFragment = await conversation.prompt("20とかいただきます");
+  record("repaired_time_fragment_to_date", "20とかいただきます", timeFragment, /(日にち|今日|明日|お日にち)/u);
+
+  const availability = await conversation.prompt("明日です");
+  record("date_to_name", "明日です", availability, /(お名前|名字)/u);
 
   const name = await conversation.prompt("佐藤です");
-  record("name_to_phone", "佐藤です", name, /電話番号/u);
+  record("name_to_caller_phone", "佐藤です", name, /(今おかけの番号|下4桁|ショートメッセージ)/u);
 
-  const mismatch = await conversation.prompt("09012345678です");
-  record("phone_mismatch", "09012345678です", mismatch, /(末尾|下4桁).*(SMS|ショートメッセージ).*(番号|送)/u);
+  const callerNumber = await conversation.prompt("はい大丈夫です");
+  record("caller_number_selected", "はい大丈夫です", callerNumber, /(コース|60分|90分|120分)/u);
 
-  const callerNumber = await conversation.prompt("今かけている番号でお願いします");
-  record("caller_number_selected", "今かけている番号でお願いします", callerNumber, /(初めて|以前|利用)/u);
+  const course = await conversation.prompt("60分でお願いします");
+  record("course_to_visit_history", "60分でお願いします", course, /(初めて|以前|利用)/u);
 
   const visit = await conversation.prompt("以前もある");
   record("repeat_visit_to_attention", "以前もある", visit, /(注意事項|店舗ルール|確認)/u);
@@ -80,6 +86,8 @@ console.log(
         transcriptionLanguage: relay.attributes.transcriptionLanguage,
         transcriptionProvider: relay.attributes.transcriptionProvider,
         speechModel: relay.attributes.speechModel,
+        speechTimeout: relay.attributes.speechTimeout,
+        interruptSensitivity: relay.attributes.interruptSensitivity,
         ttsLanguage: relay.attributes.ttsLanguage,
         ttsProvider: relay.attributes.ttsProvider,
         voice: relay.attributes.voice,

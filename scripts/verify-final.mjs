@@ -293,15 +293,17 @@ function runStaticChecks() {
       relaySource.includes("configurableTranscriptionProviderReady") &&
       relaySource.includes("googleJapaneseTranscriptionDefaultReady") &&
       relaySource.includes("reportInputDuringAgentSpeechReady") &&
-      relaySource.includes("highInterruptSensitivityReady") &&
+      relaySource.includes("balancedTurnDetectionReady") &&
+      relaySource.includes("telephonySpeechModelReady") &&
+      relaySource.includes("callerPhoneConfirmationReady") &&
       relaySource.includes("fragmentedFollowUpQuestionGuardReady") &&
       relaySource.includes("therapistProfileCommaCleanupReady") &&
       relaySource.includes("handleFragmentedFollowUpQuestion") &&
       relaySource.includes('reportInputDuringAgentSpeech="speech"') &&
-      relaySource.includes('interruptSensitivity="high"') &&
+      relaySource.includes('interruptSensitivity="medium"') &&
       relaySource.includes('process.env.VOICE_RELAY_TRANSCRIPTION_PROVIDER ?? "Google"') &&
       relaySource.includes("VOICE_RELAY_TRANSCRIPTION_PROVIDER") &&
-      relaySource.includes('"long"') &&
+      relaySource.includes('"telephony"') &&
       relaySource.includes("42000") &&
       relaySource.includes("clearNoPromptWatchdog(session)") &&
       relaySource.includes("firstPromptReceived") &&

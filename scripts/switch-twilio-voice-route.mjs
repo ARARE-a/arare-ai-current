@@ -68,7 +68,11 @@ async function assertJapaneseVoiceReady() {
   const response = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(20000) });
   const health = await response.json();
   const japaneseVoiceReady = health?.ttsProvider === "Amazon" && health?.ttsVoice === "Takumi-Neural";
-  if (!response.ok || !health?.ok || !health?.openaiConfigured || !japaneseVoiceReady) {
+  const japaneseSttReady =
+    health?.transcriptionProvider === "Google" &&
+    health?.speechModel === "telephony" &&
+    health?.conversationRelaySpeechTimeoutMs === 1200;
+  if (!response.ok || !health?.ok || !health?.openaiConfigured || !japaneseVoiceReady || !japaneseSttReady) {
     throw new Error("Japanese GPT + Takumi voice path is not ready; Twilio route was not changed");
   }
 }
