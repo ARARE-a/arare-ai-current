@@ -20,6 +20,7 @@ OPENAI_REALTIME_MEDIA_ENABLED=true
 OPENAI_REALTIME_MEDIA_MODEL=gpt-realtime-2.1
 OPENAI_REALTIME_MEDIA_VOICE=marin
 OPENAI_REALTIME_TRANSCRIPTION_MODEL=gpt-4o-transcribe
+OPENAI_REALTIME_REQUIRE_TWILIO_SIGNATURE=true
 VOICE_RELAY_USD_TO_JPY=150
 ```
 
@@ -40,6 +41,7 @@ HTTP methodは `POST`。現行Webhook URLは記録して、いつでも戻せる
 ```powershell
 npm run verify:realtime-media
 npm run verify:voice-usage-meter
+npm run verify:twilio-signature
 npm run verify:voice-relay
 npm run verify:final
 ```

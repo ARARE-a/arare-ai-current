@@ -24,6 +24,7 @@
     "verify:realtime-media": "node scripts/verify-openai-realtime-media.mjs",
     "verify:voice-usage-meter": "node scripts/verify-voice-usage-meter.mjs",
     "verify:realtime-production-call": "node scripts/verify-realtime-production-call.mjs",
+    "verify:twilio-signature": "node scripts/verify-twilio-request-validation.mjs",
     "verify:phone-ai-regression": "node scripts/verify-phone-ai-regression-1000.mjs",
     "generate:conversation-quality": "node scripts/generate-conversation-quality-cases.mjs",
     "verify:conversation-quality": "node scripts/verify-final.mjs",
@@ -38,6 +39,7 @@
     "next": "^15.3.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "twilio": "^6.0.2",
     "ws": "^8.21.0",
     "zod": "^3.25.49"
   },

@@ -9,6 +9,10 @@ import {
   buildVoiceCostSummary,
   createVoiceUsageAccumulator
 } from "./lib/voice-usage-meter.mjs";
+import {
+  buildExternalRequestUrl,
+  isValidTwilioRequest
+} from "./lib/twilio-request-validation.mjs";
 
 loadEnv(".env.local");
 loadEnv(".env");
@@ -20,6 +24,7 @@ const realtimeMediaEnabled = process.env.OPENAI_REALTIME_MEDIA_ENABLED === "true
 const realtimeMediaModel = process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1";
 const realtimeMediaVoice = process.env.OPENAI_REALTIME_MEDIA_VOICE ?? "marin";
 const realtimeMediaTranscriptionModel = process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ?? "gpt-4o-transcribe";
+const realtimeRequireTwilioSignature = process.env.OPENAI_REALTIME_REQUIRE_TWILIO_SIGNATURE !== "false";
 const voiceCostPricing = {
   realtimeTextInputUsdPerMToken: numberEnv("OPENAI_REALTIME_TEXT_INPUT_USD_PER_MTOK", 4),
   realtimeCachedInputUsdPerMToken: numberEnv("OPENAI_REALTIME_CACHED_INPUT_USD_PER_MTOK", 0.4),
@@ -280,6 +285,8 @@ const server = http.createServer(async (request, response) => {
           model: realtimeMediaModel,
           voice: realtimeMediaVoice,
           transcriptionModel: realtimeMediaTranscriptionModel,
+          twilioSignatureRequired: realtimeRequireTwilioSignature,
+          twilioSignatureReady: Boolean(twilioAuthToken),
           activeSessions: activeMediaSessions.size
         },
         usageMeter: {
@@ -316,6 +323,10 @@ const server = http.createServer(async (request, response) => {
             "</Response>"
           ].join("\n")
         );
+      }
+      if (realtimeRequireTwilioSignature && !(await isValidTwilioHttpRequest(request))) {
+        logRelay("twilio_realtime_voice_rejected", { reason: "invalid_twilio_signature" });
+        return writeForbidden(response);
       }
       await handleTwilioVoice(request, response, "openai_realtime_media");
     } catch (error) {
@@ -383,7 +394,8 @@ server.on("upgrade", (request, socket, head) => {
     return;
   }
 
-  if (validateTwilioSignature && twilioAuthToken && !isValidTwilioWebSocketRequest(request)) {
+  const requiresTwilioSignature = isRealtimeMedia ? realtimeRequireTwilioSignature : validateTwilioSignature;
+  if (requiresTwilioSignature && !isValidTwilioWebSocketRequest(request)) {
     logRelay("conversation_relay_rejected", { reason: "invalid_twilio_signature" });
     socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
     socket.destroy();
@@ -6977,8 +6989,10 @@ async function handleTwilioSmsStatus(request, response, url) {
 }
 
 async function readForm(request) {
+  if (request.arareParsedForm instanceof URLSearchParams) return request.arareParsedForm;
   const body = await readRequestBody(request);
-  return new URLSearchParams(body);
+  request.arareParsedForm = new URLSearchParams(body);
+  return request.arareParsedForm;
 }
 
 function readRequestBody(request) {
@@ -7575,14 +7589,33 @@ function stringValue(value) {
   return text || undefined;
 }
 
+async function isValidTwilioHttpRequest(request) {
+  const form = await readForm(request);
+  const signature = request.headers["x-twilio-signature"];
+  const url = buildExternalRequestUrl(request.headers, request.url);
+  return isValidTwilioRequest({
+    authToken: twilioAuthToken,
+    signature: typeof signature === "string" ? signature : undefined,
+    url,
+    params: Object.fromEntries(form.entries())
+  });
+}
+
 function isValidTwilioWebSocketRequest(request) {
   const signature = request.headers["x-twilio-signature"];
-  if (!signature || typeof signature !== "string") return false;
-  const host = request.headers["x-forwarded-host"] ?? request.headers.host;
-  const proto = request.headers["x-forwarded-proto"] ?? "https";
-  const url = `${proto}://${host}${request.url}`;
-  const expected = crypto.createHmac("sha1", twilioAuthToken).update(url).digest("base64");
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  const externalHttpUrl = buildExternalRequestUrl(request.headers, request.url);
+  const url = externalHttpUrl?.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+  return isValidTwilioRequest({
+    authToken: twilioAuthToken,
+    signature: typeof signature === "string" ? signature : undefined,
+    url,
+    params: {}
+  });
+}
+
+function writeForbidden(response) {
+  response.writeHead(403, { "content-type": "application/xml; charset=utf-8" });
+  response.end('<?xml version="1.0" encoding="UTF-8"?><Response><Reject reason="rejected"/></Response>');
 }
 
 function loadEnv(path) {
