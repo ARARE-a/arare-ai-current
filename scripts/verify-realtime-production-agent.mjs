@@ -20,10 +20,13 @@ if (
   !health?.ok ||
   !health?.databaseHealth?.ok ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 2 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 3 ||
   health?.realtimeAgent?.firstVisitExplicitAnswerGateReady !== true ||
   health?.realtimeAgent?.forcedToolQuestionReady !== true ||
   health?.realtimeAgent?.ambiguousConfirmationGuardReady !== true ||
+  health?.realtimeAgent?.nextAvailabilityToolReady !== true ||
+  health?.realtimeAgent?.staleTruncateRecoveryReady !== true ||
+  health?.realtimeAgent?.automaticLegacyFailoverReady !== true ||
   health?.realtimeAgent?.scriptedReplyPrimary !== false
 ) {
   throw new Error("Production Realtime agent health gate is not ready");
@@ -60,6 +63,22 @@ if (!websocketUrl || !customParameters.storeId || customParameters.agentMode !==
 
 const websocketSignature = twilio.getExpectedTwilioSignature(authToken, websocketUrl, {});
 const result = await runAgentSmoke({ websocketUrl, websocketSignature, customParameters, callSid, streamSid });
+const failoverCallSid = `CA_REGRESSION_FAILOVER_${Date.now()}`;
+const failoverResponse = await fetch(`${baseUrl}/api/twilio/voice/connect-status?source=realtime-agent`, {
+  method: "POST",
+  headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({
+    CallSid: failoverCallSid,
+    CallStatus: "in-progress",
+    HandoffData: JSON.stringify({ reason: "synthetic-direct-agent-failure" })
+  }),
+  signal: AbortSignal.timeout(30000)
+});
+const failoverTwiml = await failoverResponse.text();
+const automaticFailoverRedirect = failoverResponse.ok &&
+  /<Redirect\b/i.test(failoverTwiml) &&
+  /\/api\/twilio\/voice\?fallbackFrom=realtime-agent/i.test(failoverTwiml) &&
+  !/店舗に確認して折り返し/u.test(failoverTwiml);
 const report = {
   webhookStatus: webhookResponse.status,
   healthArchitecture: health.realtimeAgent.architecture,
@@ -67,6 +86,9 @@ const report = {
   firstVisitExplicitAnswerGateReady: health.realtimeAgent.firstVisitExplicitAnswerGateReady,
   forcedToolQuestionReady: health.realtimeAgent.forcedToolQuestionReady,
   ambiguousConfirmationGuardReady: health.realtimeAgent.ambiguousConfirmationGuardReady,
+  nextAvailabilityToolReady: health.realtimeAgent.nextAvailabilityToolReady,
+  staleTruncateRecoveryReady: health.realtimeAgent.staleTruncateRecoveryReady,
+  automaticLegacyFailoverReady: health.realtimeAgent.automaticLegacyFailoverReady,
   scriptedReplyPrimary: health.realtimeAgent.scriptedReplyPrimary,
   storeBound: Boolean(customParameters.storeId),
   websocketOpened: result.opened,
@@ -74,7 +96,8 @@ const report = {
   mediaMessages: result.mediaMessages,
   decodedAudioBytes: result.mediaBytes,
   playbackMarks: result.marks,
-  pass: result.opened && result.mediaMessages > 0 && result.mediaBytes >= 160 && result.marks > 0
+  automaticFailoverRedirect,
+  pass: result.opened && result.mediaMessages > 0 && result.mediaBytes >= 160 && result.marks > 0 && automaticFailoverRedirect
 };
 console.log(JSON.stringify(report, null, 2));
 if (!report.pass) process.exitCode = 1;

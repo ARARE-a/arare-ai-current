@@ -44,6 +44,7 @@ const tools = buildRealtimeAgentTools();
 assert.deepEqual(tools.map((tool) => tool.name), [
   "get_reception_state",
   "check_availability",
+  "find_next_availability",
   "record_booking_details",
   "prepare_final_confirmation",
   "create_reservation_hold"

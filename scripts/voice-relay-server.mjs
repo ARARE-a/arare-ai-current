@@ -339,13 +339,16 @@ const server = http.createServer(async (request, response) => {
           vadEagerness: realtimeAgentVadEagerness,
           responseWatchdogMs: realtimeAgentResponseWatchdogMs,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 2,
+          conversationFlowVersion: 3,
           scriptedReplyPrimary: false,
           reservationToolGateReady: true,
           explicitConfirmationGateReady: true,
           firstVisitExplicitAnswerGateReady: true,
           forcedToolQuestionReady: true,
           ambiguousConfirmationGuardReady: true,
+          nextAvailabilityToolReady: true,
+          staleTruncateRecoveryReady: true,
+          automaticLegacyFailoverReady: true,
           duplicateToolCallGuardReady: true,
           rollbackRouteReady: true,
           twilioSignatureRequired: realtimeRequireTwilioSignature,
@@ -1380,7 +1383,7 @@ async function handleTwilioVoice(request, response, provider = "conversation_rel
   const publicBaseUrl = proto + "://" + host;
   if (provider === "openai_realtime_agent") {
     const websocketUrl = buildRealtimeAgentWebSocketUrl(host);
-    const connectActionUrl = publicBaseUrl + "/api/twilio/voice/connect-status";
+    const connectActionUrl = publicBaseUrl + "/api/twilio/voice/connect-status?source=realtime-agent";
     const statusCallbackUrl = publicBaseUrl + "/api/twilio/voice/media-status";
     logRelay("twilio_voice_connect_realtime_agent", {
       callSid,
@@ -1411,7 +1414,7 @@ async function handleTwilioVoice(request, response, provider = "conversation_rel
   }
   if (provider === "openai_realtime_media") {
     const websocketUrl = buildRealtimeMediaWebSocketUrl(host);
-    const connectActionUrl = publicBaseUrl + "/api/twilio/voice/connect-status";
+    const connectActionUrl = publicBaseUrl + "/api/twilio/voice/connect-status?source=realtime-media";
     const statusCallbackUrl = publicBaseUrl + "/api/twilio/voice/media-status";
     logRelay("twilio_voice_connect_realtime_media", {
       callSid,
@@ -1440,7 +1443,7 @@ async function handleTwilioVoice(request, response, provider = "conversation_rel
     );
   }
   const websocketUrl = buildRelayWebSocketUrl(host);
-  const connectActionUrl = publicBaseUrl + "/api/twilio/voice/connect-status";
+  const connectActionUrl = publicBaseUrl + "/api/twilio/voice/connect-status?source=legacy";
 
   logRelay("twilio_voice_connect_relay", {
     callSid,
@@ -1467,6 +1470,7 @@ async function handleTwilioVoice(request, response, provider = "conversation_rel
 }
 
 async function handleTwilioConnectStatus(request, response) {
+  const source = new URL(request.url ?? "", "http://localhost").searchParams.get("source") ?? "unknown";
   const form = await readForm(request);
   const callSid = form.get("CallSid") || undefined;
   const callStatus = form.get("CallStatus") || undefined;
@@ -1476,6 +1480,7 @@ async function handleTwilioConnectStatus(request, response) {
   logRelay("twilio_connect_status", {
     callSid,
     callStatus,
+    source,
     hasHandoffData: Boolean(handoffData)
   });
 
@@ -1533,6 +1538,22 @@ async function handleTwilioConnectStatus(request, response) {
   }
 
   if (shouldPlayFallback) {
+    if (source === "realtime-agent" || source === "realtime-media") {
+      const host = request.headers["x-forwarded-host"] || request.headers.host;
+      const proto = request.headers["x-forwarded-proto"] || "https";
+      const fallbackUrl = `${proto}://${host}/api/twilio/voice?fallbackFrom=${encodeURIComponent(source)}`;
+      logRelay("twilio_realtime_automatic_legacy_failover", { callSid, source });
+      return writeXml(
+        response,
+        [
+          '<?xml version="1.0" encoding="UTF-8"?>',
+          "<Response>",
+          "  " + sayJa("接続を切り替えます。そのままお待ちください。"),
+          '  <Redirect method="POST">' + escapeXml(fallbackUrl) + "</Redirect>",
+          "</Response>"
+        ].join("\n")
+      );
+    }
     return writeXml(
       response,
       [
@@ -1558,16 +1579,22 @@ async function handleTwilioMediaStatus(request, response) {
   if (callSid && streamEvent === "stream-error") {
     const session = activeMediaSessions.get(callSid) ?? activeAgentSessions.get(callSid);
     if (session) session.requiredReview = true;
-    await prisma.callLog
-      .updateMany({
-        where: { twilioCallSid: callSid },
-        data: {
-          status: "ESCALATED",
-          requiredReview: true,
-          reviewNotes: `Twilio Media Stream error: ${String(streamError ?? "unknown").slice(0, 400)}`
-        }
-      })
+    const streamReviewNote = `Twilio Media Stream error: ${String(streamError ?? "unknown").slice(0, 400)}`;
+    const existingCallLog = await prisma.callLog
+      .findFirst({ where: { twilioCallSid: callSid }, select: { id: true, reviewNotes: true } })
       .catch(() => null);
+    if (existingCallLog) {
+      await prisma.callLog
+        .update({
+          where: { id: existingCallLog.id },
+          data: {
+            status: "ESCALATED",
+            requiredReview: true,
+            reviewNotes: mergeReviewNotes(existingCallLog.reviewNotes, streamReviewNote)
+          }
+        })
+        .catch(() => null);
+    }
   }
 
   response.writeHead(204);
@@ -4006,7 +4033,10 @@ async function findNextAvailableSlot(session, context, dayParts, searchFrom, the
     session.reservationDraft.alternative_search_from_datetime = formatJstDateTimeOffset(startFloor);
   }
   const searchEnd = new Date(startFloor.getTime() + 14 * 24 * 60 * 60 * 1000);
-  const course = context?.courses?.find((item) => item.durationMin === 90) ?? context?.courses?.[0] ?? { durationMin: 90 };
+  const course = session.reservationDraft?.course ??
+    context?.courses?.find((item) => item.durationMin === 90) ??
+    context?.courses?.[0] ??
+    { durationMin: 90 };
   const [shifts, reservations, blockedSlots, rooms] = await Promise.all([
     prisma.shift.findMany({
       where: {
@@ -8368,6 +8398,7 @@ function buildRealtimeAgentInstructions(session) {
     "",
     "予約の絶対ルール:",
     "1. 空きがあるとは推測せず、日時、コース時間、指名条件が分かったら必ずcheck_availabilityを呼びます。",
+    "   利用者が『最短』『一番早い』『次に空いている時間』を尋ねた場合は、コース時間と指名条件を確認後、日時を質問せずfind_next_availabilityを呼びます。",
     "2. check_availabilityがAVAILABLEを返す前に、名前や電話番号を質問してはいけません。",
     "3. 空き確認後、得た情報をrecord_booking_detailsへ記録します。既知の情報は再質問しません。",
     callerLast4
@@ -8423,6 +8454,22 @@ function buildRealtimeAgentTools() {
           therapist_name: { type: "string", description: "指名時の登録セラピスト名" }
         },
         required: ["starts_at", "course_duration_min", "booking_type"],
+        additionalProperties: false
+      }
+    },
+    {
+      type: "function",
+      name: "find_next_availability",
+      description: "最短、一番早い、次に空いている時間をDBのシフト・部屋・既存予約から検索する。最短希望の利用者へ日時を質問せず使う。",
+      parameters: {
+        type: "object",
+        properties: {
+          course_duration_min: { type: "integer", description: "希望コースの分数" },
+          booking_type: { type: "string", enum: ["free", "nominated"], description: "フリーまたは指名" },
+          therapist_name: { type: "string", description: "指名時の登録セラピスト名" },
+          not_before: { type: "string", description: "この日時以降という条件がある場合のISO 8601。指定がなければ現在以降" }
+        },
+        required: ["course_duration_min", "booking_type"],
         additionalProperties: false
       }
     },
@@ -8548,6 +8595,7 @@ async function handleRealtimeAgentTool(session, name, args, callId) {
   try {
     if (name === "get_reception_state") return getRealtimeAgentReceptionState(session);
     if (name === "check_availability") return checkRealtimeAgentAvailability(session, args);
+    if (name === "find_next_availability") return findRealtimeAgentNextAvailability(session, args);
     if (name === "record_booking_details") return recordRealtimeAgentBookingDetails(session, args);
     if (name === "prepare_final_confirmation") return prepareRealtimeAgentFinalConfirmation(session, args);
     if (name === "create_reservation_hold") return createRealtimeAgentReservationHold(session, args);
@@ -8678,6 +8726,107 @@ async function checkRealtimeAgentAvailability(session, args) {
       booking_type: bookingType
     },
     next_question: "空きを確認できました。お名前をお願いします。名字だけでも大丈夫です。"
+  };
+}
+
+async function findRealtimeAgentNextAvailability(session, args) {
+  const context = await ensureStoreReceptionContext(session);
+  const course = findRealtimeAgentCourse(context, args?.course_duration_min);
+  if (!course) {
+    return {
+      ok: false,
+      code: "COURSE_NOT_FOUND",
+      available_course_minutes: (context?.courses ?? []).map((item) => item.durationMin),
+      next_question: "60分、90分、120分のどのコースをご希望ですか？"
+    };
+  }
+
+  const bookingType = args?.booking_type === "nominated" ? "nominated" : "free";
+  const therapist = bookingType === "nominated"
+    ? findRealtimeAgentTherapist(context, args?.therapist_name)
+    : null;
+  if (bookingType === "nominated" && !therapist) {
+    return {
+      ok: false,
+      code: "THERAPIST_NOT_FOUND",
+      registered_therapists: (context?.therapists ?? []).map((item) => item.displayName),
+      next_question: "ご指名のセラピスト名をもう一度お願いします。"
+    };
+  }
+
+  let searchFrom = new Date();
+  if (args?.not_before) {
+    const parsed = parseRealtimeAgentStartsAt(args.not_before, context?.store);
+    if (!parsed) {
+      return { ok: false, code: "INVALID_DATETIME", next_question: "何日以降をご希望か、もう一度お願いします。" };
+    }
+    if (parsed.getTime() > searchFrom.getTime()) searchFrom = parsed;
+  }
+
+  const draft = session.reservationDraft ?? createReservationDraft();
+  session.reservationDraft = draft;
+  draft.course = course;
+  draft.availableCourses = context?.courses ?? [];
+  draft.nominationIntent = bookingType === "nominated";
+  draft.therapistName = therapist?.displayName;
+  draft.selected_therapist_source = therapist ? "explicit_user_nomination" : undefined;
+  draft.availability_search_mode = true;
+  draft.awaitingFinalConfirmation = false;
+  draft.completed = false;
+  invalidateRealtimeAgentConfirmation(session);
+
+  const nextSlot = await findNextAvailableSlot(
+    session,
+    context,
+    getJstDatePartsFromDate(searchFrom),
+    searchFrom,
+    therapist?.displayName
+  );
+  if (!nextSlot) {
+    const state = session.realtimeAgentState;
+    state.availabilityToken = undefined;
+    state.availabilityKey = undefined;
+    return {
+      ok: false,
+      code: "NO_NEXT_AVAILABILITY",
+      message_for_customer: "現在の登録シフトでは空きを見つけられませんでした。別のコースか指名条件をお願いします。"
+    };
+  }
+
+  draft.startsAt = nextSlot.startsAt;
+  draft.startsAtText = formatJstDateTimeOffset(nextSlot.startsAt);
+  draft.requested_datetime = formatJstDateTimeOffset(nextSlot.startsAt);
+  draft.therapistName = nextSlot.therapist?.displayName;
+  if (bookingType === "free") draft.selected_therapist_source = "ai_assigned_after_availability";
+
+  const check = await checkReservationAvailability(session, context, draft);
+  draft.availabilityCheckResult = summarizeAvailabilityCheck(check);
+  if (!check.ok) {
+    return {
+      ok: false,
+      code: "NEXT_AVAILABILITY_STALE",
+      message_for_customer: "空き状況が変わったため、もう一度最短時間を検索します。"
+    };
+  }
+  if (check.selectedTherapist?.displayName) draft.therapistName = check.selectedTherapist.displayName;
+
+  const state = session.realtimeAgentState;
+  state.availabilityKey = buildRealtimeAgentAvailabilityKey(draft);
+  state.availabilityToken = crypto.randomUUID();
+  logConversationState(session, "realtime_agent_next_availability", { next_action: "collect_booking_details" });
+  return {
+    ok: true,
+    code: "AVAILABLE",
+    availability_token: state.availabilityToken,
+    slot: {
+      starts_at: formatJstDateTimeOffset(check.startsAt),
+      ends_at: formatJstDateTimeOffset(check.endsAt),
+      course_name: course.name,
+      course_duration_min: course.durationMin,
+      therapist_name: check.selectedTherapist?.displayName ?? nextSlot.therapist?.displayName ?? null,
+      booking_type: bookingType
+    },
+    next_question: `最短では${formatDateTimeJa(check.startsAt)}をご案内できます。よろしければ、お名前をお願いします。`
   };
 }
 
@@ -9030,6 +9179,7 @@ export {
   createPhoneSession,
   createRealtimeAgentState,
   createRealtimeAgentReservationHold,
+  findRealtimeAgentNextAvailability,
   getRealtimeAgentReceptionState,
   markRealtimeAgentAssistantEvidence,
   prepareRealtimeAgentFinalConfirmation,

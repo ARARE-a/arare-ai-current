@@ -140,6 +140,7 @@ export class OpenAiRealtimeAgentBridge {
       const mark = this.pendingMarks.get(name);
       if (mark) {
         this.pendingMarks.delete(name);
+        if (mark.itemId && mark.itemId === this.currentOutputItemId) this.resetCurrentOutputState();
         this.onPlaybackComplete({ name, terminal: mark.terminal });
       }
       return;
@@ -195,7 +196,11 @@ export class OpenAiRealtimeAgentBridge {
       return;
     }
     if (event.type === "response.output_item.added") {
-      if (event.item?.type === "message" && event.item?.id) this.currentOutputItemId = event.item.id;
+      if (event.item?.type === "message" && event.item?.id) {
+        this.currentOutputItemId = event.item.id;
+        this.currentOutputBytes = 0;
+        this.firstOutputAudioAt = 0;
+      }
       return;
     }
     if (event.type === "response.output_audio_transcript.delta" || event.type === "response.audio_transcript.delta") {
@@ -209,7 +214,7 @@ export class OpenAiRealtimeAgentBridge {
       return;
     }
     if (event.type === "response.output_audio.delta" || event.type === "response.audio.delta") {
-      this.streamAudioToTwilio(event.delta);
+      this.streamAudioToTwilio(event.delta, event.item_id);
       return;
     }
     if (event.type === "response.done") {
@@ -219,6 +224,10 @@ export class OpenAiRealtimeAgentBridge {
     if (event.type === "error") {
       const reason = event.error?.message ?? event.message ?? "OpenAI Realtime agent error";
       if (/no active response|Cancellation failed/i.test(reason)) return;
+      if (/Audio content of \d+ms is already shorter than \d+ms/i.test(reason)) {
+        this.log("openai_realtime_agent_stale_truncate_ignored", { reason });
+        return;
+      }
       await this.fail(new Error(reason));
     }
   }
@@ -240,8 +249,14 @@ export class OpenAiRealtimeAgentBridge {
     }, this.responseWatchdogMs);
   }
 
-  streamAudioToTwilio(delta) {
+  streamAudioToTwilio(delta, itemId) {
     if (!delta || !this.streamSid || this.twilioSocket.readyState !== OPEN) return;
+    const resolvedItemId = String(itemId ?? this.currentOutputItemId ?? "");
+    if (resolvedItemId && resolvedItemId !== this.currentOutputItemId) {
+      this.currentOutputItemId = resolvedItemId;
+      this.currentOutputBytes = 0;
+      this.firstOutputAudioAt = 0;
+    }
     this.responseHadAudio = true;
     if (!this.firstOutputAudioAt) this.firstOutputAudioAt = Date.now();
     this.currentOutputBytes += Buffer.from(delta, "base64").length;
@@ -344,33 +359,44 @@ export class OpenAiRealtimeAgentBridge {
     if (this.streamSid && this.twilioSocket.readyState === OPEN) {
       this.twilioSocket.send(JSON.stringify({ event: "clear", streamSid: this.streamSid }));
     }
-    if (this.openai?.readyState === OPEN && this.currentOutputItemId && this.firstOutputAudioAt) {
+    const currentItemHasPendingPlayback = [...this.pendingMarks.values()]
+      .some((mark) => mark.itemId && mark.itemId === this.currentOutputItemId);
+    if (
+      this.openai?.readyState === OPEN &&
+      this.currentOutputItemId &&
+      this.firstOutputAudioAt &&
+      (this.responseActive || currentItemHasPendingPlayback)
+    ) {
       const bufferedMs = Math.floor(this.currentOutputBytes / PCMU_BYTES_PER_MILLISECOND);
       const elapsedMs = Math.max(0, Date.now() - this.firstOutputAudioAt);
-      const audioEndMs = Math.max(0, Math.min(bufferedMs, elapsedMs));
-      this.openai.send(JSON.stringify({
-        type: "conversation.item.truncate",
-        item_id: this.currentOutputItemId,
-        content_index: 0,
-        audio_end_ms: audioEndMs
-      }));
-      this.log("openai_realtime_agent_audio_truncated", {
-        itemId: this.currentOutputItemId,
-        audioEndMs
-      });
+      const audioEndMs = Math.max(0, Math.min(Math.max(0, bufferedMs - 80), elapsedMs));
+      if (audioEndMs > 0) {
+        this.openai.send(JSON.stringify({
+          type: "conversation.item.truncate",
+          item_id: this.currentOutputItemId,
+          content_index: 0,
+          audio_end_ms: audioEndMs
+        }));
+        this.log("openai_realtime_agent_audio_truncated", {
+          itemId: this.currentOutputItemId,
+          audioEndMs
+        });
+      }
     }
+    this.pendingMarks.clear();
     this.clearResponseWatchdog();
     this.responseActive = false;
     this.responseHadAudio = false;
     this.currentOutputBytes = 0;
     this.firstOutputAudioAt = 0;
+    this.currentOutputItemId = undefined;
     this.terminalPending = false;
   }
 
   sendPlaybackMark() {
     if (!this.streamSid || this.twilioSocket.readyState !== OPEN) return;
     const name = `arare-agent-audio-${++this.markCounter}`;
-    this.pendingMarks.set(name, { terminal: this.terminalPending });
+    this.pendingMarks.set(name, { terminal: this.terminalPending, itemId: this.currentOutputItemId });
     this.terminalPending = false;
     this.twilioSocket.send(JSON.stringify({ event: "mark", streamSid: this.streamSid, mark: { name } }));
   }
@@ -378,6 +404,12 @@ export class OpenAiRealtimeAgentBridge {
   clearResponseWatchdog() {
     if (this.responseWatchdog) clearTimeout(this.responseWatchdog);
     this.responseWatchdog = undefined;
+  }
+
+  resetCurrentOutputState() {
+    this.currentOutputItemId = undefined;
+    this.currentOutputBytes = 0;
+    this.firstOutputAudioAt = 0;
   }
 
   async fail(error) {

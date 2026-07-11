@@ -123,6 +123,37 @@ if (recordArgs.availability_token !== availabilityToken || !String(recordArgs.cu
 }
 
 socket.close(1000, "verification complete");
+
+const earliestSocket = new WebSocket(`wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
+  headers: { Authorization: `Bearer ${apiKey}` }
+});
+const earliestEvents = createEventQueue(earliestSocket);
+await waitForOpen(earliestSocket);
+earliestSocket.send(JSON.stringify({
+  type: "session.update",
+  session: {
+    type: "realtime",
+    model,
+    output_modalities: ["audio"],
+    instructions: buildRealtimeAgentInstructions(session),
+    tools: buildRealtimeAgentTools(),
+    tool_choice: "auto",
+    audio: { output: { format: { type: "audio/pcmu" }, voice } }
+  }
+}));
+await earliestEvents.waitFor((event) => event.type === "session.updated", 15000);
+sendUserText(earliestSocket, "90分、フリーで一番早く空いている時間を知りたいです");
+const earliestResponse = await createResponseAndWait(earliestSocket, earliestEvents);
+const earliestCall = findToolCall(earliestResponse, "find_next_availability");
+if (!earliestCall) {
+  throw new Error(`Model did not use the next-availability tool: ${extractTranscript(earliestResponse) || "no tool call"}`);
+}
+const earliestArgs = parseArguments(earliestCall);
+if (Number(earliestArgs.course_duration_min) !== 90 || earliestArgs.booking_type !== "free") {
+  throw new Error(`Next-availability arguments were incorrect: ${earliestCall.arguments}`);
+}
+earliestSocket.close(1000, "earliest availability verification complete");
+
 console.log(JSON.stringify({
   ok: true,
   model,
@@ -131,7 +162,9 @@ console.log(JSON.stringify({
     availabilityToolBeforeSpeech: true,
     availabilityArgumentsCorrect: true,
     asksForNameAfterAvailability: true,
-    recordsNameWithAvailabilityToken: true
+    recordsNameWithAvailabilityToken: true,
+    nextAvailabilityToolSelected: true,
+    nextAvailabilityArgumentsCorrect: true
   }
 }, null, 2));
 

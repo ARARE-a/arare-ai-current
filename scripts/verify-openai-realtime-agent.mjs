@@ -32,6 +32,7 @@ const assistantTranscripts = [];
 const toolCalls = [];
 const playbackEvents = [];
 const usageEvents = [];
+const bridgeErrors = [];
 const tools = [
   {
     type: "function",
@@ -66,7 +67,8 @@ const bridge = new OpenAiRealtimeAgentBridge({
       : { ok: true, code: "AVAILABLE", next_question: "お名前をお願いします。" };
   },
   onUsage: (source, usage) => usageEvents.push({ source, usage }),
-  onPlaybackComplete: (event) => playbackEvents.push(event)
+  onPlaybackComplete: (event) => playbackEvents.push(event),
+  onError: async (error) => bridgeErrors.push(error.message)
 });
 
 await bridge.connect();
@@ -111,6 +113,7 @@ assert.equal(twilio.sent.at(-1).event, "mark");
 const greetingMark = twilio.sent.at(-1);
 await bridge.handleTwilioMessage(greetingMark);
 assert.deepEqual(playbackEvents, [{ name: greetingMark.mark.name, terminal: false }]);
+assert.equal(bridge.currentOutputItemId, undefined, "acknowledged playback must not be truncated on the next caller turn");
 
 openai.emit("message", JSON.stringify({
   type: "conversation.item.input_audio_transcription.completed",
@@ -167,6 +170,12 @@ assert.ok(twilio.sent.some((item) => item.event === "clear"));
 const truncate = openai.sent.find((item) => item.type === "conversation.item.truncate" && item.item_id === "item_interrupt");
 assert.ok(truncate);
 assert.ok(truncate.audio_end_ms >= 0 && truncate.audio_end_ms <= 100);
+openai.emit("message", JSON.stringify({
+  type: "error",
+  error: { message: "Audio content of 8450ms is already shorter than 14050ms" }
+}));
+await tick();
+assert.deepEqual(bridgeErrors, [], "a stale truncate response must not terminate the call");
 
 openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_terminal_tool" } }));
 openai.emit("message", JSON.stringify({
@@ -202,7 +211,7 @@ assert.equal(playbackEvents.at(-1).terminal, true);
 assert.deepEqual(usageEvents.map((item) => item.source), ["realtime_agent", "transcription", "realtime_agent"]);
 
 bridge.close();
-console.log(JSON.stringify({ ok: true, checks: 22 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 26 }, null, 2));
 
 function tick() {
   return new Promise((resolve) => setImmediate(resolve));
