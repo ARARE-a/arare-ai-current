@@ -50,6 +50,8 @@ assert.deepEqual(tools.map((tool) => tool.name), [
 ]);
 assert.match(buildRealtimeAgentInstructions(session), /生音声を直接理解/);
 assert.match(buildRealtimeAgentInstructions(session), /既に聞いた情報を再質問しません/);
+assert.match(buildRealtimeAgentInstructions(session), /利用者の返答を受ける前/);
+assert.match(buildRealtimeAgentInstructions(session), /『はい』『ありがとう』『すごい』から推測しません/);
 assert.equal(validateRealtimeAgentAvailabilityToken(session, "wrong-token").code, "INVALID_AVAILABILITY_TOKEN");
 assert.equal(validateRealtimeAgentAvailabilityToken(session, "availability-token"), null);
 
@@ -69,12 +71,30 @@ result = recordRealtimeAgentBookingDetails(session, {
   availability_token: "availability-token",
   customer_name: "佐藤",
   use_caller_number: true,
-  caller_number_confirmed: true,
-  first_visit: false
+  caller_number_confirmed: true
 });
 assert.equal(result.ok, true);
 assert.equal(session.reservationDraft.customerName, "佐藤");
 assert.equal(session.reservationDraft.phone, "080-3788-4404");
+assert.equal(session.reservationDraft.firstVisit, undefined);
+assert.equal(result.next_required_field, "first_visit");
+
+result = recordRealtimeAgentBookingDetails(session, {
+  availability_token: "availability-token",
+  first_visit: true
+});
+assert.equal(result.code, "FIRST_VISIT_CONFIRMATION_REQUIRED");
+assert.equal(session.reservationDraft.firstVisit, undefined);
+
+markRealtimeAgentAssistantEvidence(session, "初めてのご利用ですか？それとも、以前にもご利用がありますか？");
+session.realtimeAgentState.userSpeechSequence = 2;
+session.realtimeAgentState.lastUserTranscript = "以前も利用しました";
+session.realtimeAgentState.lastUserTranscriptSpeechSequence = 2;
+result = recordRealtimeAgentBookingDetails(session, {
+  availability_token: "availability-token",
+  first_visit: false
+});
+assert.equal(result.ok, true);
 assert.equal(session.reservationDraft.firstVisit, false);
 assert.equal(result.next_required_field, "attention");
 
@@ -86,9 +106,9 @@ assert.equal(result.code, "ATTENTION_CONFIRMATION_REQUIRED");
 assert.notEqual(session.reservationDraft.attentionConfirmed, true);
 
 markRealtimeAgentAssistantEvidence(session, "注意事項と店舗ルールを確認済みでしたら、確認しましたとお願いします。");
-session.realtimeAgentState.userSpeechSequence = 2;
+session.realtimeAgentState.userSpeechSequence = 3;
 session.realtimeAgentState.lastUserTranscript = "確認しました";
-session.realtimeAgentState.lastUserTranscriptSpeechSequence = 2;
+session.realtimeAgentState.lastUserTranscriptSpeechSequence = 3;
 result = recordRealtimeAgentBookingDetails(session, {
   availability_token: "availability-token",
   attention_confirmed: true
@@ -122,4 +142,4 @@ result = await createRealtimeAgentReservationHold(session, {
 assert.equal(result.code, "ALREADY_CREATED");
 assert.equal(result.terminal, true);
 
-console.log(JSON.stringify({ ok: true, checks: 25 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 33 }, null, 2));

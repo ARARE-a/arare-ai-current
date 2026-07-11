@@ -8334,6 +8334,7 @@ function createRealtimeAgentState() {
     lastUserTranscriptSpeechSequence: 0,
     lastAssistantTranscript: "",
     callerPhonePromptSpeechSequence: -1,
+    firstVisitPromptSpeechSequence: -1,
     attentionPromptSpeechSequence: -1,
     availabilityToken: undefined,
     availabilityKey: undefined,
@@ -8352,8 +8353,13 @@ function buildRealtimeAgentInstructions(session) {
     "あなたはARARE AIの電話予約受付です。利用者の生音声を直接理解し、あなた自身の音声で応答します。",
     "必ず日本語の自然な標準語だけで話してください。英語、ローマ字、翻訳調、英語風の相づちは禁止です。",
     "落ち着いた成人男性の電話受付として、1回の発話は原則1〜2文、質問は1つだけにします。",
+    "不足項目は一度に並べず、日時、コース、指名条件などを会話に合わせて1項目ずつ確認します。",
     "既に聞いた情報を再質問しません。曖昧な場合だけ、推定した候補を短く復唱して確認します。",
+    "聞き取りが曖昧な言葉を勝手に予約情報へ変換しません。候補を1つだけ示して『60分でよろしいですか』のように確認します。",
     "利用者が話し始めたら発話を止め、割り込み後の内容に答えてください。",
+    "利用者の返答を受ける前に『ありがとうございます』と先へ進んではいけません。",
+    "ツールを呼ぶターンでは前置きや『少しお待ちください』を話さず、ツールだけを呼びます。ツール結果の質問を話した後は返答を待ちます。",
+    "『同意を前提に』『準備を進めます』『必要事項へ進みます』などの内部処理を思わせる表現は禁止です。",
     "ツール名、内部トークン、JSON、システム、プロンプトという言葉を利用者へ話してはいけません。",
     "",
     "予約の絶対ルール:",
@@ -8364,8 +8370,10 @@ function buildRealtimeAgentInstructions(session) {
       ? `4. SMS送信先は、まず「今おかけの番号、下4桁${callerLast4}へ送ってよろしいですか」と確認し、同意後だけuse_caller_numberを使います。`
       : "4. SMS送信先の電話番号は11桁で確認します。",
     "5. 初回利用か再来かを確認し、注意事項と店舗ルールを確認済みか明示的に確認します。",
+    "   初回・再来は『初めてです』『以前も利用しました』などの明示回答だけを記録します。『はい』『ありがとう』『すごい』から推測しません。",
     "6. 必須情報が揃ったらprepare_final_confirmationを呼び、返されたspoken_summaryを省略せず読み上げます。",
     "7. 復唱を読み上げた後の、利用者の明確な同意を聞いてからcreate_reservation_holdを呼びます。",
+    "   曖昧な返答では、成功したように礼を言ったり処理開始を案内したりせず、その返答をそのままツールで検証します。",
     "8. create_reservation_holdが成功する前に『予約できました』『確定しました』『SMSを送りました』と言ってはいけません。",
     "9. 成功後も『仮予約を承りました。店舗確認後に確定案内します』と案内し、確定済みとは言いません。",
     "10. 変更が入ったら古い復唱を使わず、必要なツールを再実行します。",
@@ -8426,7 +8434,7 @@ function buildRealtimeAgentTools() {
           phone: { type: "string", description: "利用者が明示したSMS送信先電話番号" },
           use_caller_number: { type: "boolean", description: "今かけている番号へのSMS送信に利用者が同意した時だけtrue" },
           caller_number_confirmed: { type: "boolean", description: "今かけている番号への送信に明確な同意を得た時だけtrue" },
-          first_visit: { type: "boolean", description: "初回ならtrue、再来ならfalse" },
+          first_visit: { type: "boolean", description: "利用者が直前に『初めて』と明示した場合だけtrue、『以前も利用』と明示した場合だけfalse" },
           attention_confirmed: { type: "boolean", description: "注意事項と店舗ルールを確認済みと利用者が答えた時だけtrue" }
         },
         required: ["availability_token"],
@@ -8471,6 +8479,9 @@ function markRealtimeAgentAssistantEvidence(session, transcript) {
   state.lastAssistantTranscript = transcript;
   if (/今おかけの番号|下4桁/u.test(text)) {
     state.callerPhonePromptSpeechSequence = state.userSpeechSequence;
+  }
+  if (/初めて(?:の)?ご利用|ご利用は初めて|以前に?もご利用/u.test(text)) {
+    state.firstVisitPromptSpeechSequence = state.userSpeechSequence;
   }
   if (/注意事項|店舗ルール/u.test(text) && /確認/u.test(text)) {
     state.attentionPromptSpeechSequence = state.userSpeechSequence;
@@ -8703,6 +8714,22 @@ function recordRealtimeAgentBookingDetails(session, args) {
     }
   }
 
+  if (typeof args?.first_visit === "boolean") {
+    const askedBeforeCurrentSpeech = state.firstVisitPromptSpeechSequence >= 0 &&
+      state.userSpeechSequence > state.firstVisitPromptSpeechSequence;
+    const transcriptMatchesCurrentSpeech = state.lastUserTranscriptSpeechSequence === state.userSpeechSequence;
+    const explicitAnswer = transcriptMatchesCurrentSpeech
+      ? extractFirstVisitAnswer(state.lastUserTranscript)
+      : undefined;
+    if (!askedBeforeCurrentSpeech || explicitAnswer === undefined || explicitAnswer !== args.first_visit) {
+      return {
+        ok: false,
+        code: "FIRST_VISIT_CONFIRMATION_REQUIRED",
+        next_question: "初めてのご利用ですか？それとも、以前にもご利用がありますか？"
+      };
+    }
+  }
+
   let changed = false;
   if (args?.customer_name !== undefined) {
     const customerName = sanitizeRealtimeAgentCustomerName(args.customer_name);
@@ -8798,7 +8825,7 @@ async function createRealtimeAgentReservationHold(session, args) {
     return {
       ok: false,
       code: "CONFIRMATION_NOT_VERIFIED",
-      next_question: "最終確認です。内容が合っていれば『はい』、変更があれば変更内容をお願いします。"
+      next_question: "内容が合っていれば『はい』とお答えください。変更があれば、変更内容をお願いします。"
     };
   }
   const tokenError = validateRealtimeAgentAvailabilityToken(session, state.availabilityToken);
@@ -8922,7 +8949,7 @@ function buildRealtimeAgentNextQuestion(draft, field) {
       : "ショートメッセージを送る電話番号を11桁でお願いします。";
   }
   if (field === "course") return "ご希望のコース時間をお願いします。";
-  if (field === "first_visit") return "ご利用は初めてですか？以前もご利用がありますか？";
+  if (field === "first_visit") return "初めてのご利用ですか？それとも、以前にもご利用がありますか？";
   if (field === "attention") return "注意事項と店舗ルールを確認済みでしたら、『確認しました』とお願いします。";
   return "不足している内容を一つ確認します。";
 }

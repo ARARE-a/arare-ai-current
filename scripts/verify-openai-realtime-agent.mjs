@@ -145,6 +145,8 @@ const toolOutput = openai.sent.find((item) => item.type === "conversation.item.c
 assert.ok(toolOutput);
 assert.equal(JSON.parse(toolOutput.item.output).code, "AVAILABLE");
 assert.equal(openai.sent.at(-1).type, "response.create");
+assert.match(openai.sent.at(-1).response.instructions, /お名前をお願いします/);
+assert.match(openai.sent.at(-1).response.instructions, /前置きや補足を加えず/);
 
 const responseCreateCount = openai.sent.filter((item) => item.type === "response.create").length;
 openai.emit("message", JSON.stringify(toolResponse));

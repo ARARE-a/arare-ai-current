@@ -309,6 +309,12 @@ export class OpenAiRealtimeAgentBridge {
         };
       }
       if (result?.terminal === true) this.terminalPending = true;
+      if (result?.message_for_customer) {
+        forcedSpeechInstruction = `次の案内だけを、前置きや補足を加えず自然に話してください。\n${result.message_for_customer}`;
+      }
+      if (result?.next_question) {
+        forcedSpeechInstruction = `次の質問だけを、前置きや補足を加えず自然に話してください。話した後は利用者の返答を待ってください。\n${result.next_question}`;
+      }
       if (result?.spoken_summary) {
         forcedSpeechInstruction = `次の最終復唱だけを、内容を省略・追加・変更せず自然に読み上げてください。読み上げ後は利用者の返答を待ってください。\n${result.spoken_summary}`;
       }
