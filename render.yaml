@@ -19,11 +19,15 @@ services:
       - key: OPENAI_REALTIME_MEDIA_MODEL
         value: gpt-realtime-2.1
       - key: OPENAI_REALTIME_MEDIA_VOICE
-        value: marin
+        value: cedar
       - key: OPENAI_REALTIME_TRANSCRIPTION_MODEL
         value: gpt-4o-transcribe
       - key: OPENAI_REALTIME_REQUIRE_TWILIO_SIGNATURE
         value: "true"
+      - key: DEMO_AUTO_BUSINESS_HOUR_SHIFTS_ENABLED
+        value: "true"
+      - key: DEMO_AUTO_SHIFT_DAYS
+        value: "90"
       - key: VOICE_RELAY_USD_TO_JPY
         value: "150"
       - key: TWILIO_ACCOUNT_SID

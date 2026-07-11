@@ -13,6 +13,7 @@ import {
   buildExternalRequestUrl,
   isValidTwilioRequest
 } from "./lib/twilio-request-validation.mjs";
+import { ensureDemoBusinessHourShifts } from "./lib/demo-business-hour-shifts.mjs";
 
 loadEnv(".env.local");
 loadEnv(".env");
@@ -22,9 +23,12 @@ const openAiKey = process.env.OPENAI_API_KEY;
 const realtimeModel = process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2";
 const realtimeMediaEnabled = process.env.OPENAI_REALTIME_MEDIA_ENABLED === "true";
 const realtimeMediaModel = process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1";
-const realtimeMediaVoice = process.env.OPENAI_REALTIME_MEDIA_VOICE ?? "marin";
+const realtimeMediaVoice = process.env.OPENAI_REALTIME_MEDIA_VOICE ?? "cedar";
 const realtimeMediaTranscriptionModel = process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ?? "gpt-4o-transcribe";
 const realtimeRequireTwilioSignature = process.env.OPENAI_REALTIME_REQUIRE_TWILIO_SIGNATURE !== "false";
+const demoAutoBusinessHourShiftsEnabled = process.env.DEMO_AUTO_BUSINESS_HOUR_SHIFTS_ENABLED !== "false";
+const demoAutoShiftStoreId = process.env.DEMO_STORE_ID ?? "demo-store-arare-ai";
+const demoAutoShiftDays = Math.max(7, Number(process.env.DEMO_AUTO_SHIFT_DAYS ?? 90));
 const voiceCostPricing = {
   realtimeTextInputUsdPerMToken: numberEnv("OPENAI_REALTIME_TEXT_INPUT_USD_PER_MTOK", 4),
   realtimeCachedInputUsdPerMToken: numberEnv("OPENAI_REALTIME_CACHED_INPUT_USD_PER_MTOK", 0.4),
@@ -87,6 +91,8 @@ const RESPONSE_WATCHDOG_MS = Number(process.env.VOICE_RELAY_RESPONSE_WATCHDOG_MS
 const prisma = new PrismaClient();
 const activeSessions = new Map();
 const activeMediaSessions = new Map();
+let lastDemoShiftRefresh = null;
+let lastDemoShiftRefreshError = null;
 
 function logRelay(event, data = {}) {
   const safeData = Object.fromEntries(
@@ -284,10 +290,19 @@ const server = http.createServer(async (request, response) => {
           enabled: realtimeMediaEnabled,
           model: realtimeMediaModel,
           voice: realtimeMediaVoice,
+          language: "ja-JP",
+          genderInstruction: "male",
           transcriptionModel: realtimeMediaTranscriptionModel,
           twilioSignatureRequired: realtimeRequireTwilioSignature,
           twilioSignatureReady: Boolean(twilioAuthToken),
           activeSessions: activeMediaSessions.size
+        },
+        demoBusinessHourShifts: {
+          enabled: demoAutoBusinessHourShiftsEnabled,
+          storeId: demoAutoShiftStoreId,
+          days: demoAutoShiftDays,
+          lastRefresh: lastDemoShiftRefresh,
+          lastError: lastDemoShiftRefreshError
         },
         usageMeter: {
           rawOpenAiUsageReady: true,
@@ -957,9 +972,38 @@ function summarizeConversationRelayMessage(message) {
   );
 }
 
-server.listen(port, () => {
-  console.log(`ARARE AI voice relay listening on :${port}`);
-});
+void startVoiceRelay();
+
+async function startVoiceRelay() {
+  await refreshDemoBusinessHourShifts();
+  server.listen(port, () => {
+    console.log(`ARARE AI voice relay listening on :${port}`);
+  });
+  if (demoAutoBusinessHourShiftsEnabled) {
+    const refreshTimer = setInterval(() => {
+      void refreshDemoBusinessHourShifts();
+    }, 12 * 60 * 60 * 1000);
+    refreshTimer.unref();
+  }
+}
+
+async function refreshDemoBusinessHourShifts() {
+  if (!demoAutoBusinessHourShiftsEnabled || !process.env.DATABASE_URL) return;
+  try {
+    const result = await ensureDemoBusinessHourShifts({
+      prisma,
+      storeId: demoAutoShiftStoreId,
+      days: demoAutoShiftDays,
+      apply: true
+    });
+    lastDemoShiftRefresh = new Date().toISOString();
+    lastDemoShiftRefreshError = null;
+    logRelay("demo_business_hour_shifts_refreshed", result);
+  } catch (error) {
+    lastDemoShiftRefreshError = error instanceof Error ? error.message : String(error);
+    logRelay("demo_business_hour_shifts_refresh_failed", { reason: lastDemoShiftRefreshError });
+  }
+}
 
 
 async function handleTwilioVoice(request, response, provider = "conversation_relay") {

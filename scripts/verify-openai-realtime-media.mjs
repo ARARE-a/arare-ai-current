@@ -34,7 +34,7 @@ const bridge = new OpenAiRealtimeMediaBridge({
   twilioSocket: twilio,
   apiKey: "test-key",
   model: "gpt-realtime-2.1",
-  voice: "marin",
+  voice: "cedar",
   transcriptionModel: "gpt-4o-transcribe",
   openAiSocketFactory: () => {
     queueMicrotask(() => openai.open());
@@ -51,7 +51,10 @@ await bridge.connect();
 assert.equal(openai.sent[0].type, "session.update");
 assert.deepEqual(openai.sent[0].session.audio.input.format, { type: "audio/pcmu" });
 assert.deepEqual(openai.sent[0].session.audio.output.format, { type: "audio/pcmu" });
-assert.equal(openai.sent[0].session.audio.output.voice, "marin");
+assert.equal(openai.sent[0].session.audio.output.voice, "cedar");
+assert.match(openai.sent[0].session.instructions, /日本語ネイティブ/);
+assert.match(openai.sent[0].session.instructions, /成人男性/);
+assert.match(openai.sent[0].session.instructions, /英語風の抑揚/);
 assert.equal(openai.sent[0].session.audio.input.turn_detection.create_response, false);
 
 await bridge.handleTwilioMessage({
@@ -77,6 +80,8 @@ assert.deepEqual(transcripts, ["明日の21時で空いていますか"]);
 bridge.enqueueSpeech("明日の21時ですね。", true);
 assert.equal(openai.sent.at(-1).type, "response.create");
 assert.equal(openai.sent.at(-1).response.output_modalities[0], "audio");
+assert.match(openai.sent.at(-1).response.instructions, /成人男性/);
+assert.match(openai.sent.at(-1).response.instructions, /標準語/);
 
 openai.emit("message", JSON.stringify({ type: "response.output_audio.delta", delta: "PCMU_OUTPUT" }));
 await new Promise((resolve) => setImmediate(resolve));
