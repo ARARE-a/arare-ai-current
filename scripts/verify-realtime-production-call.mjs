@@ -35,11 +35,25 @@ async function buildReport() {
   );
 
   let callLog;
+  let realtimeUsageEvent = null;
   try {
-    callLog = explicitCallSid
-      ? await prisma.callLog.findFirst({ where: { twilioCallSid: explicitCallSid }, orderBy: { createdAt: "desc" } })
-      : await prisma.callLog.findFirst({ orderBy: { createdAt: "desc" } });
-    checks.push(check("本番DB接続", "PASS", "CallLogを読み取りました"));
+    if (explicitCallSid) {
+      callLog = await prisma.callLog.findFirst({
+        where: { twilioCallSid: explicitCallSid },
+        orderBy: { createdAt: "desc" }
+      });
+      realtimeUsageEvent = await findRealtimeUsageEvent(explicitCallSid);
+    } else {
+      realtimeUsageEvent = await findLatestRealtimeUsageEvent();
+      const discoveredCallSid = realtimeUsageEvent?.after?.callSid;
+      callLog = typeof discoveredCallSid === "string"
+        ? await prisma.callLog.findFirst({
+            where: { twilioCallSid: discoveredCallSid },
+            orderBy: { createdAt: "desc" }
+          })
+        : null;
+    }
+    checks.push(check("本番DB接続", "PASS", "Realtime利用証跡とCallLogを検索しました"));
   } catch (error) {
     checks.push(
       check(
@@ -65,6 +79,18 @@ async function buildReport() {
   if (!callSid || !callLog) {
     return finalizeReport(callSid, checks, null);
   }
+
+  realtimeUsageEvent ??= await findRealtimeUsageEvent(callSid);
+  const realtimeMediaModel = realtimeUsageEvent?.after?.models?.realtimeMedia;
+  checks.push(
+    check(
+      "OpenAI Realtime経路証跡",
+      typeof realtimeMediaModel === "string" && realtimeMediaModel.length > 0 ? "PASS" : "FAIL",
+      realtimeMediaModel
+        ? `model=${realtimeMediaModel}, usageRecordedAt=${realtimeUsageEvent.createdAt.toISOString()}`
+        : "このCallSidにOpenAI Realtime利用証跡がありません"
+    )
+  );
 
   const twilioCall = await fetchTwilioResource(`Calls/${encodeURIComponent(callSid)}.json`);
   checks.push(
@@ -160,12 +186,7 @@ async function buildReport() {
     )
   );
 
-  const usageEvents = await prisma.storePhoneEvent.findMany({
-    where: { storeId: callLog.storeId, eventType: "VOICE_AI_USAGE_RECORDED" },
-    orderBy: { createdAt: "desc" },
-    take: 100
-  });
-  const usageEvent = usageEvents.find((item) => item.after && item.after.callSid === callSid) ?? null;
+  const usageEvent = realtimeUsageEvent;
   const usageAfter = usageEvent?.after ?? null;
   const rawTokens = Number(usageAfter?.usage?.realtime?.totalTokens ?? 0) + Number(usageAfter?.usage?.transcription?.totalTokens ?? 0);
   checks.push(
@@ -218,6 +239,31 @@ async function buildReport() {
     storeId: callLog.storeId,
     notificationCount: notifications.length
   });
+}
+
+async function findLatestRealtimeUsageEvent() {
+  const usageEvents = await prisma.storePhoneEvent.findMany({
+    where: { eventType: "VOICE_AI_USAGE_RECORDED" },
+    orderBy: { createdAt: "desc" },
+    take: 1000
+  });
+  return usageEvents.find((item) => {
+    const model = item.after?.models?.realtimeMedia;
+    const callSid = item.after?.callSid;
+    return typeof model === "string" && model.length > 0 && typeof callSid === "string" && callSid.length > 0;
+  }) ?? null;
+}
+
+async function findRealtimeUsageEvent(callSid) {
+  const usageEvents = await prisma.storePhoneEvent.findMany({
+    where: { eventType: "VOICE_AI_USAGE_RECORDED" },
+    orderBy: { createdAt: "desc" },
+    take: 1000
+  });
+  return usageEvents.find((item) => {
+    const model = item.after?.models?.realtimeMedia;
+    return item.after?.callSid === callSid && typeof model === "string" && model.length > 0;
+  }) ?? null;
 }
 
 function finalizeReport(callSid, checks, references) {
