@@ -4,6 +4,7 @@
     { "scope": "phone_caller_affirmative", "utterance": "はい大丈夫です", "expected": true },
     { "scope": "phone_caller_affirmative", "utterance": "今のでいい", "expected": true },
     { "scope": "phone_caller_affirmative", "utterance": "今かけてる番号でお願いします", "expected": true },
+    { "scope": "phone_caller_affirmative", "utterance": "はい、その番号でお願いします", "expected": true },
     { "scope": "phone_caller_affirmative", "utterance": "聞いた番号にして", "expected": false },
     { "scope": "final_confirmation", "utterance": "了解", "expected": "confirm" },
     { "scope": "final_confirmation", "utterance": "確認した", "expected": "confirm" },

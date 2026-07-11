@@ -25,7 +25,7 @@ export function isPhoneCallerNumberAffirmative(value) {
   if (!text) return false;
   if (/(違う|ちがう|別|変更|変え|聞いた番号|言った番号|伝えた番号)/u.test(text)) return false;
   if (isNaturalAffirmative(text)) return true;
-  return /^(?:今かけている番号|今かけてる番号|かけている番号|かけてる番号|この番号|発信番号|着信番号)(?:で|に|へ)?(?:お願いします|送って|大丈夫|いいです)?$/u.test(text);
+  return /^(?:(?:はい|うん|ええ))?(?:その番号|今の番号|今かけている番号|今かけてる番号|かけている番号|かけてる番号|この番号|発信番号|着信番号)(?:で|に|へ)?(?:お願いします|お願い|送って|送ってください|大丈夫|大丈夫です|いいです)?$/u.test(text);
 }
 
 export function isRepeatReservationSummaryRequest(value) {

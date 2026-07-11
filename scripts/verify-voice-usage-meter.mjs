@@ -60,6 +60,15 @@ assert.ok(summary.estimatedCost.transcriptionUsdMicros > 0);
 assert.ok(summary.estimatedCost.totalJpy > 0);
 assert.equal(summary.estimatedCost.billingAmountConfirmed, false);
 
+const agentSummary = buildVoiceCostSummary({
+  accumulator,
+  durationSeconds: 120,
+  provider: "openai_realtime_agent",
+  pricing
+});
+assert.equal(agentSummary.pricing.twilioFeatureUsdPerMinute, pricing.twilioMediaStreamsUsdPerMinute);
+assert.equal(agentSummary.estimatedCost.twilioUsdMicros, 28_800);
+
 const cachedWithoutDetails = createVoiceUsageAccumulator();
 addVoiceUsage(cachedWithoutDetails, "text_reasoning", {
   input_tokens: 100,

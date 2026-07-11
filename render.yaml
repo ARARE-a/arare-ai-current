@@ -22,6 +22,18 @@ services:
         value: cedar
       - key: OPENAI_REALTIME_TRANSCRIPTION_MODEL
         value: gpt-4o-transcribe
+      - key: OPENAI_REALTIME_AGENT_ENABLED
+        value: "true"
+      - key: OPENAI_REALTIME_AGENT_MODEL
+        value: gpt-realtime-2.1
+      - key: OPENAI_REALTIME_AGENT_VOICE
+        value: cedar
+      - key: OPENAI_REALTIME_AGENT_TRANSCRIPTION_MODEL
+        value: gpt-4o-transcribe
+      - key: OPENAI_REALTIME_AGENT_VAD_EAGERNESS
+        value: medium
+      - key: OPENAI_REALTIME_AGENT_RESPONSE_WATCHDOG_MS
+        value: "12000"
       - key: OPENAI_REALTIME_REQUIRE_TWILIO_SIGNATURE
         value: "true"
       - key: DEMO_AUTO_BUSINESS_HOUR_SHIFTS_ENABLED

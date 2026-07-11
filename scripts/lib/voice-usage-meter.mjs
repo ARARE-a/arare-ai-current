@@ -39,7 +39,7 @@ export function buildVoiceCostSummary({ accumulator, durationSeconds, provider, 
   const seconds = Math.max(0, Math.round(Number(durationSeconds) || 0));
   const minutes = seconds / 60;
   const twilioFeatureRate =
-    provider === "openai_realtime_media"
+    ["openai_realtime_media", "openai_realtime_agent"].includes(provider)
       ? pricing.twilioMediaStreamsUsdPerMinute
       : pricing.twilioConversationRelayUsdPerMinute;
   const twilioUsdMicros = Math.round(
