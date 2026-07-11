@@ -8,6 +8,7 @@ const args = parseArgs(process.argv.slice(2));
 const prisma = new PrismaClient();
 const healthUrl = args.health ?? "https://arare-ai-voice-relay.onrender.com/health";
 const explicitCallSid = args["call-sid"];
+const expectedProvider = String(args.provider ?? "agent").toLowerCase();
 const smsReceived = args["sms-received"] === true || args["sms-received"] === "true";
 const uiMatched = args["ui-matched"] === true || args["ui-matched"] === "true";
 const outputJson = args.json === true || args.json === "true";
@@ -24,12 +25,13 @@ try {
 async function buildReport() {
   const checks = [];
   const health = await fetchJson(healthUrl);
+  const healthTarget = expectedProvider === "agent" ? health.data?.realtimeAgent : health.data?.realtimeMedia;
   checks.push(
     check(
-      "Realtime本番フラグ",
-      health.ok && health.data?.realtimeMedia?.enabled === true ? "PASS" : health.ok ? "FAIL" : "UNVERIFIED",
+      expectedProvider === "agent" ? "Realtime直接Agent本番フラグ" : "Realtime本番フラグ",
+      health.ok && healthTarget?.enabled === true ? "PASS" : health.ok ? "FAIL" : "UNVERIFIED",
       health.ok
-        ? `enabled=${Boolean(health.data?.realtimeMedia?.enabled)}, model=${health.data?.realtimeMedia?.model ?? "unknown"}`
+        ? `provider=${expectedProvider}, enabled=${Boolean(healthTarget?.enabled)}, model=${healthTarget?.model ?? "unknown"}, scriptedPrimary=${healthTarget?.scriptedReplyPrimary ?? "n/a"}`
         : health.error
     )
   );
@@ -69,10 +71,12 @@ async function buildReport() {
   checks.push(
     check(
       "DB電話ログ",
-      callLog ? "PASS" : "FAIL",
+      callLog ? "PASS" : explicitCallSid ? "FAIL" : "UNVERIFIED",
       callLog
         ? `status=${callLog.status}, duration=${callLog.durationSeconds ?? "unknown"}秒, review=${callLog.requiredReview}`
-        : "CallLogが見つかりません"
+        : expectedProvider === "agent"
+          ? "直接Agent経路の実電話ログがまだありません"
+          : "CallLogが見つかりません"
     )
   );
 
@@ -81,10 +85,10 @@ async function buildReport() {
   }
 
   realtimeUsageEvent ??= await findRealtimeUsageEvent(callSid);
-  const realtimeMediaModel = realtimeUsageEvent?.after?.models?.realtimeMedia;
+  const realtimeMediaModel = getExpectedUsageModel(realtimeUsageEvent);
   checks.push(
     check(
-      "OpenAI Realtime経路証跡",
+      expectedProvider === "agent" ? "OpenAI直接Speech-to-Speech経路証跡" : "OpenAI Realtime経路証跡",
       typeof realtimeMediaModel === "string" && realtimeMediaModel.length > 0 ? "PASS" : "FAIL",
       realtimeMediaModel
         ? `model=${realtimeMediaModel}, usageRecordedAt=${realtimeUsageEvent.createdAt.toISOString()}`
@@ -248,7 +252,7 @@ async function findLatestRealtimeUsageEvent() {
     take: 1000
   });
   return usageEvents.find((item) => {
-    const model = item.after?.models?.realtimeMedia;
+    const model = getExpectedUsageModel(item);
     const callSid = item.after?.callSid;
     return typeof model === "string" && model.length > 0 && typeof callSid === "string" && callSid.length > 0;
   }) ?? null;
@@ -261,9 +265,15 @@ async function findRealtimeUsageEvent(callSid) {
     take: 1000
   });
   return usageEvents.find((item) => {
-    const model = item.after?.models?.realtimeMedia;
+    const model = getExpectedUsageModel(item);
     return item.after?.callSid === callSid && typeof model === "string" && model.length > 0;
   }) ?? null;
+}
+
+function getExpectedUsageModel(event) {
+  return expectedProvider === "agent"
+    ? event?.after?.models?.realtimeAgent
+    : event?.after?.models?.realtimeMedia;
 }
 
 function finalizeReport(callSid, checks, references) {
