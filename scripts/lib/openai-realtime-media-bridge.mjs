@@ -9,6 +9,7 @@ export class OpenAiRealtimeMediaBridge {
     this.model = options.model;
     this.voice = options.voice;
     this.transcriptionModel = options.transcriptionModel;
+    this.vadEagerness = options.vadEagerness ?? "medium";
     this.openAiUrl = options.openAiUrl ?? "wss://api.openai.com/v1/realtime";
     this.openAiSocketFactory = options.openAiSocketFactory ?? createOpenAiSocket;
     this.log = options.log ?? (() => {});
@@ -29,6 +30,10 @@ export class OpenAiRealtimeMediaBridge {
     this.markCounter = 0;
     this.pendingInputAudio = [];
     this.closed = false;
+    this.inputSpeechStartedAt = 0;
+    this.transcriptionCompletedAt = 0;
+    this.speechRequestStartedAt = 0;
+    this.firstOutputAudioAt = 0;
   }
 
   async connect() {
@@ -78,6 +83,7 @@ export class OpenAiRealtimeMediaBridge {
         type: "realtime",
         model: this.model,
         output_modalities: ["audio"],
+        include: ["item.input_audio_transcription.logprobs"],
         instructions: [
           "あなたは日本語音声の読み上げ担当です。",
           "システムから渡された文章だけを、内容や語順を変えずに発話してください。",
@@ -94,7 +100,7 @@ export class OpenAiRealtimeMediaBridge {
             },
             turn_detection: {
               type: "semantic_vad",
-              eagerness: "high",
+              eagerness: this.vadEagerness,
               create_response: false,
               interrupt_response: false
             }
@@ -166,6 +172,12 @@ export class OpenAiRealtimeMediaBridge {
 
     this.activeSpeech = true;
     this.audioReceivedForResponse = false;
+    this.speechRequestStartedAt = Date.now();
+    this.firstOutputAudioAt = 0;
+    this.log("openai_realtime_tts_requested", {
+      textLength: text.length,
+      queuedSpeechCount: this.speechQueue.length
+    });
     this.openai.send(
       JSON.stringify({
         type: "response.create",
@@ -196,6 +208,7 @@ export class OpenAiRealtimeMediaBridge {
     }
 
     if (event.type === "input_audio_buffer.speech_started") {
+      this.inputSpeechStartedAt = Date.now();
       this.interruptPlayback();
       this.onSpeechStarted();
       return;
@@ -203,14 +216,33 @@ export class OpenAiRealtimeMediaBridge {
 
     if (event.type === "conversation.item.input_audio_transcription.completed") {
       const transcript = String(event.transcript ?? "").trim();
+      this.transcriptionCompletedAt = Date.now();
+      const confidence = summarizeTranscriptionConfidence(event.logprobs);
+      this.log("openai_realtime_transcription_completed", {
+        itemId: event.item_id,
+        textLength: transcript.length,
+        confidence,
+        sttLatencyMs: this.inputSpeechStartedAt ? this.transcriptionCompletedAt - this.inputSpeechStartedAt : null
+      });
       if (event.usage) this.onUsage("transcription", event.usage);
-      if (transcript) await this.onTranscript(transcript, event.item_id);
+      if (transcript) {
+        await this.onTranscript(transcript, event.item_id, {
+          confidence,
+          sttLatencyMs: this.inputSpeechStartedAt ? this.transcriptionCompletedAt - this.inputSpeechStartedAt : null
+        });
+      }
       return;
     }
 
     if (event.type === "response.output_audio.delta" || event.type === "response.audio.delta") {
       if (!event.delta || !this.streamSid || this.twilioSocket.readyState !== OPEN) return;
       this.audioReceivedForResponse = true;
+      if (!this.firstOutputAudioAt) {
+        this.firstOutputAudioAt = Date.now();
+        this.log("openai_realtime_tts_first_audio", {
+          firstAudioLatencyMs: this.speechRequestStartedAt ? this.firstOutputAudioAt - this.speechRequestStartedAt : null
+        });
+      }
       if (this.responseTimer) clearTimeout(this.responseTimer);
       this.responseTimer = undefined;
       this.twilioSocket.send(
@@ -228,6 +260,10 @@ export class OpenAiRealtimeMediaBridge {
       if (this.responseTimer) clearTimeout(this.responseTimer);
       this.responseTimer = undefined;
       this.activeSpeech = false;
+      this.log("openai_realtime_tts_completed", {
+        totalLatencyMs: this.speechRequestStartedAt ? Date.now() - this.speechRequestStartedAt : null,
+        audioReceived: this.audioReceivedForResponse
+      });
       if (this.audioReceivedForResponse) this.sendPlaybackMark();
       this.pumpSpeechQueue();
       return;
@@ -279,6 +315,16 @@ export class OpenAiRealtimeMediaBridge {
     this.clearTimers();
     if (this.openai?.readyState === OPEN) this.openai.close();
   }
+}
+
+function summarizeTranscriptionConfidence(logprobs) {
+  if (!Array.isArray(logprobs) || !logprobs.length) return null;
+  const values = logprobs
+    .map((item) => Number(item?.logprob))
+    .filter((value) => Number.isFinite(value));
+  if (!values.length) return null;
+  const probability = values.reduce((sum, value) => sum + Math.exp(value), 0) / values.length;
+  return Number(Math.max(0, Math.min(1, probability)).toFixed(4));
 }
 
 function createOpenAiSocket(url, options) {

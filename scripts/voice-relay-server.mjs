@@ -14,6 +14,18 @@ import {
   isValidTwilioRequest
 } from "./lib/twilio-request-validation.mjs";
 import { ensureDemoBusinessHourShifts } from "./lib/demo-business-hour-shifts.mjs";
+import {
+  advanceStateRetry,
+  classifyFinalConfirmationTurn,
+  extractFirstVisitAnswer,
+  getNextReservationField,
+  isAttentionConfirmationAnswer,
+  isLowConfidenceCustomerName,
+  isNaturalAffirmative,
+  isPhoneCallerNumberAffirmative,
+  isRepeatReservationSummaryRequest,
+  normalizePhoneIntentText
+} from "./lib/phone-state-intents.mjs";
 
 loadEnv(".env.local");
 loadEnv(".env");
@@ -25,6 +37,7 @@ const realtimeMediaEnabled = process.env.OPENAI_REALTIME_MEDIA_ENABLED === "true
 const realtimeMediaModel = process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1";
 const realtimeMediaVoice = process.env.OPENAI_REALTIME_MEDIA_VOICE ?? "cedar";
 const realtimeMediaTranscriptionModel = process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ?? "gpt-4o-transcribe";
+const realtimeMediaVadEagerness = normalizeRealtimeVadEagerness(process.env.OPENAI_REALTIME_VAD_EAGERNESS ?? "medium");
 const realtimeRequireTwilioSignature = process.env.OPENAI_REALTIME_REQUIRE_TWILIO_SIGNATURE !== "false";
 const demoAutoBusinessHourShiftsEnabled = process.env.DEMO_AUTO_BUSINESS_HOUR_SHIFTS_ENABLED !== "false";
 const demoAutoShiftStoreId = process.env.DEMO_STORE_ID ?? "demo-store-arare-ai";
@@ -251,7 +264,8 @@ const server = http.createServer(async (request, response) => {
         configurableTranscriptionProviderReady: true,
         googleJapaneseTranscriptionDefaultReady: true,
         reportInputDuringAgentSpeechReady: true,
-        highInterruptSensitivityReady: true,
+        highInterruptSensitivityReady: realtimeMediaVadEagerness === "high",
+        balancedTurnDetectionReady: realtimeMediaVadEagerness === "medium",
         fragmentedFollowUpQuestionGuardReady: true,
         therapistProfileCommaCleanupReady: true,
         candidateOfferVariationReady: true,
@@ -292,7 +306,10 @@ const server = http.createServer(async (request, response) => {
           voice: realtimeMediaVoice,
           language: "ja-JP",
           genderInstruction: "male",
+          nativeJapaneseMaleGuaranteed: false,
+          outputMode: "prompt-guided-openai-voice",
           transcriptionModel: realtimeMediaTranscriptionModel,
+          vadEagerness: realtimeMediaVadEagerness,
           twilioSignatureRequired: realtimeRequireTwilioSignature,
           twilioSignatureReady: Boolean(twilioAuthToken),
           activeSessions: activeMediaSessions.size
@@ -433,6 +450,9 @@ function createPhoneSession() {
     storePhoneSettingId: undefined,
     transcript: [],
     assistantTranscript: [],
+    conversationTurns: [],
+    statePromptAttempts: {},
+    persistenceErrors: [],
     openai: undefined,
     publicBaseUrl: undefined,
     pendingText: "",
@@ -468,6 +488,56 @@ function createPhoneSession() {
     usageAccumulator: createVoiceUsageAccumulator(),
     usageMeterRecorded: false
   };
+}
+
+function recordConversationTurn(session, role, content) {
+  const text = String(content ?? "").trim();
+  if (!session || !text) return;
+  session.conversationTurns ??= [];
+  session.conversationTurns.push({
+    sequence: session.conversationTurns.length + 1,
+    role,
+    content: text,
+    createdAt: new Date().toISOString()
+  });
+}
+
+function pushCustomerTranscript(session, content) {
+  const text = String(content ?? "").trim();
+  if (!text) return;
+  session.transcript.push(`お客様: ${text}`);
+  recordConversationTurn(session, "CUSTOMER", text);
+}
+
+function pushAssistantTranscript(session, content) {
+  const text = String(content ?? "").trim();
+  if (!text) return;
+  session.assistantTranscript.push(`AI: ${text}`);
+  recordConversationTurn(session, "AI", text);
+}
+
+function pushSystemTranscript(session, content) {
+  const text = String(content ?? "").trim();
+  if (!text) return;
+  session.transcript.push(text);
+  recordConversationTurn(session, "SYSTEM", text);
+}
+
+function buildChronologicalTranscript(session) {
+  if (Array.isArray(session?.conversationTurns) && session.conversationTurns.length) {
+    return session.conversationTurns
+      .map((turn) => {
+        if (turn.role === "CUSTOMER") return `お客様: ${turn.content}`;
+        if (turn.role === "AI") return `AI: ${turn.content}`;
+        return `SYSTEM: ${turn.content}`;
+      })
+      .join("\n");
+  }
+  return [...(session?.transcript ?? []), ...(session?.assistantTranscript ?? [])].join("\n");
+}
+
+function buildRecentConversationTranscript(session, limit = 10) {
+  return buildChronologicalTranscript(session).split("\n").filter(Boolean).slice(-limit).join("\n");
 }
 
 wss.on("connection", (twilioSocket) => {
@@ -563,7 +633,7 @@ wss.on("connection", (twilioSocket) => {
     }
 
     if (message.type === "dtmf") {
-      session.transcript.push(`DTMF: ${message.digit}`);
+      pushSystemTranscript(session, `DTMF: ${message.digit}`);
       await upsertCallLog(session, "TRANSCRIBED");
       return;
     }
@@ -667,9 +737,12 @@ mediaWss.on("connection", (twilioSocket) => {
         model: realtimeMediaModel,
         voice: realtimeMediaVoice,
         transcriptionModel: realtimeMediaTranscriptionModel,
+        vadEagerness: realtimeMediaVadEagerness,
         log: (event, data) => logRelay(event, { callSid: session.callSid, ...data }),
-        onTranscript: async (transcript) => {
-          await processCallerPrompt(session, twilioSocket, transcript, "openai_realtime_media");
+        onTranscript: async (transcript, itemId, metadata = {}) => {
+          session.lastUserTranscriptConfidence = metadata.confidence;
+          session.lastUserTranscriptionItemId = itemId;
+          await processCallerPrompt(session, twilioSocket, transcript, "openai_realtime_media", metadata);
         },
         onUsage: (source, usage) => {
           addVoiceUsage(session.usageAccumulator, source, usage);
@@ -728,7 +801,7 @@ mediaWss.on("connection", (twilioSocket) => {
     }
 
     if (message.event === "dtmf") {
-      session.transcript.push(`DTMF: ${message.dtmf?.digit ?? ""}`);
+      pushSystemTranscript(session, `DTMF: ${message.dtmf?.digit ?? ""}`);
       await upsertCallLog(session, "TRANSCRIBED");
     }
     await session.mediaBridge?.handleTwilioMessage(message);
@@ -750,7 +823,7 @@ mediaWss.on("connection", (twilioSocket) => {
   });
 });
 
-async function processCallerPrompt(session, twilioSocket, callerText, transport) {
+async function processCallerPrompt(session, twilioSocket, callerText, transport, transcriptionMetadata = {}) {
   const promptStartedAt = Date.now();
   session.consecutiveEmptyPrompts = 0;
   try {
@@ -760,10 +833,12 @@ async function processCallerPrompt(session, twilioSocket, callerText, transport)
     logRelay("phone_ai_prompt", {
       callSid: session.callSid,
       transport,
-      textLength: callerText.length
+      textLength: callerText.length,
+      transcriptConfidence: transcriptionMetadata.confidence ?? null,
+      sttLatencyMs: transcriptionMetadata.sttLatencyMs ?? null
     });
 
-    session.transcript.push(`お客様: ${callerText}`);
+    pushCustomerTranscript(session, callerText);
     await appendPhoneConversationMessage(session, "CUSTOMER", callerText);
     await upsertCallLog(session, "TRANSCRIBED");
     if (session.hasActiveOpenAiResponse) {
@@ -809,7 +884,7 @@ function scheduleNoPromptWatchdog(session, twilioSocket) {
     session.noPromptTerminalTimer = setTimeout(async () => {
       if (session.firstPromptReceived || twilioSocket.readyState !== WebSocket.OPEN) return;
       const reply = "お声が確認できないため、店舗スタッフから折り返しご案内します。お電話ありがとうございました。";
-      session.assistantTranscript.push(`AI: ${reply}`);
+      pushAssistantTranscript(session, reply);
       session.lastAssistantText = reply;
       logRelay("conversation_relay_no_prompt_terminal", {
         callSid: session.callSid,
@@ -841,7 +916,7 @@ function scheduleNoPromptFirstFallback(session, twilioSocket, delayMs) {
     }
     const reply = buildNoPromptRecoveryReply(session);
     session.noPromptFallbackSent = true;
-    session.assistantTranscript.push(`AI: ${reply}`);
+    pushAssistantTranscript(session, reply);
     session.lastAssistantText = reply;
     logRelay("conversation_relay_no_prompt_fallback", {
       callSid: session.callSid,
@@ -880,7 +955,7 @@ async function sendInitialListeningGreeting(session, twilioSocket) {
   if (session.initialListeningGreetingSent || twilioSocket.readyState !== WebSocket.OPEN) return;
   const reply = VOICE_RELAY_INITIAL_LISTENING_GREETING;
   session.initialListeningGreetingSent = true;
-  session.assistantTranscript.push(`AI: ${reply}`);
+  pushAssistantTranscript(session, reply);
   session.lastAssistantText = reply;
   session.lastAgentSpeakingAt = Date.now();
   logRelay("conversation_relay_initial_listening_greeting", {
@@ -896,7 +971,7 @@ async function handleEmptyCallerPrompt(session, twilioSocket) {
   if (session.consecutiveEmptyPrompts < 2) return;
   const reply = buildFreeTalkRecoveryReply(session, "") || buildNoPromptRecoveryReply(session);
   session.consecutiveEmptyPrompts = 0;
-  session.assistantTranscript.push(`AI: ${reply}`);
+  pushAssistantTranscript(session, reply);
   session.lastAssistantText = reply;
   logRelay("conversation_relay_empty_prompt_recovery", {
     callSid: session.callSid,
@@ -1254,7 +1329,7 @@ function mergeReviewNotes(existing, incoming) {
 async function sendScriptedReply(session, twilioSocket, reply) {
   const text = String(reply ?? "").trim();
   if (!text) return;
-  session.assistantTranscript.push(`AI: ${text}`);
+  pushAssistantTranscript(session, text);
   await appendPhoneConversationMessage(session, "AI", text);
   session.lastAssistantText = text;
   logConversationState(session, "assistant_reply", {
@@ -1270,7 +1345,7 @@ async function sendScriptedReply(session, twilioSocket, reply) {
 async function sendProcessingAck(session, twilioSocket, text) {
   if (session.processingAckSentForFinalConfirmation) return;
   session.processingAckSentForFinalConfirmation = true;
-  session.assistantTranscript.push(`AI: ${text}`);
+  pushAssistantTranscript(session, text);
   await appendPhoneConversationMessage(session, "AI", text);
   session.lastAssistantText = text;
   logConversationState(session, "assistant_processing_ack", {
@@ -1297,7 +1372,7 @@ async function handlePromptProcessingError(session, twilioSocket, error, callerT
     reason: reason.slice(0, 500)
   });
   const reply = "\u78ba\u8a8d\u306b\u6642\u9593\u304c\u304b\u304b\u3063\u3066\u3044\u308b\u305f\u3081\u3001\u5e97\u8217\u30b9\u30bf\u30c3\u30d5\u304b\u3089\u6298\u308a\u8fd4\u3057\u3054\u6848\u5185\u3044\u305f\u3057\u307e\u3059\u3002";
-  session.assistantTranscript.push(`AI: ${reply}`);
+  pushAssistantTranscript(session, reply);
   session.lastAssistantText = reply;
   sendTwilioText(twilioSocket, reply, true);
   sendTwilioEnd(twilioSocket, {
@@ -1327,6 +1402,8 @@ async function scriptedReplyFor(session, callerText) {
     });
     return reply;
   }
+  const priorityStateReply = await handlePriorityReservationState(session, callerText, context);
+  if (priorityStateReply) return priorityStateReply;
   const adultServiceTerminologyReply = handleAdultServiceTerminology(session, callerText, context);
   if (adultServiceTerminologyReply) return adultServiceTerminologyReply;
   const earlyTherapistFeatureReply = formatSpecificTherapistFeatureAnswer(text, context?.therapists ?? [], draft);
@@ -2187,20 +2264,26 @@ function buildPhoneMismatchQuestion(draft) {
   return `念のため確認です。今おかけの番号は末尾${mismatch.callerLast4}、伺った番号は末尾${mismatch.heardLast4}です。SMSは今おかけの番号へ送ってよろしいですか？違う場合は送信先番号をお願いします。`;
 }
 
+function consumePhoneMismatchQuestion(draft) {
+  if (draft?.phoneMismatchConfirmation) draft.phoneMismatchConfirmation.pendingPrompt = false;
+  return buildPhoneMismatchQuestion(draft);
+}
+
 function clearPhoneMismatch(draft, phone) {
   draft.phone = formatPhoneWithHyphen(phone);
   draft.phoneMismatchConfirmation = undefined;
-  draft.awaitingField = "phone";
+  draft.awaitingField = undefined;
   draft.awaitingFinalConfirmation = false;
 }
 
 function continueAfterPhoneConfirmed(draft) {
-  if (draft.startsAt && draft.customerName && draft.course) {
-    draft.awaitingField = "finalConfirmation";
-    draft.awaitingFinalConfirmation = true;
-    return buildFinalConfirmationText(draft);
-  }
-  return "\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3059\u3002" + buildStateNextInstruction(draft);
+  draft.awaitingField = undefined;
+  draft.awaitingFinalConfirmation = false;
+  const nextQuestion = buildShortNextQuestion(draft, draft.availableCourses ?? []);
+  if (nextQuestion) return "ありがとうございます。" + nextQuestion;
+  draft.awaitingField = "finalConfirmation";
+  draft.awaitingFinalConfirmation = true;
+  return buildFinalConfirmationText(draft);
 }
 
 function handlePhoneMismatchConfirmation(session, callerText) {
@@ -2223,15 +2306,31 @@ function handlePhoneMismatchConfirmation(session, callerText) {
       return continueAfterPhoneConfirmed(draft);
     }
     setDraftPhoneFromCallerInput(session, draft, explicitDigits);
-    return draft.phoneMismatchConfirmation ? buildPhoneMismatchQuestion(draft) : continueAfterPhoneConfirmed(draft);
+    return draft.phoneMismatchConfirmation ? consumePhoneMismatchQuestion(draft) : continueAfterPhoneConfirmed(draft);
+  }
+
+  const compactText = normalizePhoneIntentText(callerText);
+  const mentionsCallerLast4 = mismatch.callerLast4 && compactText.includes(mismatch.callerLast4);
+  const mentionsHeardLast4 = mismatch.heardLast4 && compactText.includes(mismatch.heardLast4);
+  if (mentionsCallerLast4 && !mentionsHeardLast4) {
+    resetStatePromptAttempts(session, "phoneMismatchConfirmation");
+    clearPhoneMismatch(draft, mismatch.callerPhone);
+    return continueAfterPhoneConfirmed(draft);
+  }
+  if (mentionsHeardLast4 && !mentionsCallerLast4) {
+    resetStatePromptAttempts(session, "phoneMismatchConfirmation");
+    clearPhoneMismatch(draft, mismatch.heardPhone);
+    return continueAfterPhoneConfirmed(draft);
   }
 
   if (isPhoneMismatchCallerNumberAffirmative(text) || /(\u4eca\u304b\u3051|\u304b\u3051\u3066|\u767a\u4fe1|\u3053\u306e\u756a\u53f7|\u7740\u4fe1|\u81ea\u5206\u306e\u756a\u53f7)/u.test(text)) {
+    resetStatePromptAttempts(session, "phoneMismatchConfirmation");
     clearPhoneMismatch(draft, mismatch.callerPhone);
     return continueAfterPhoneConfirmed(draft);
   }
 
   if (/(\u4eca\u8a00\u3063\u305f|\u5148\u307b\u3069|\u4f1d\u3048\u305f|\u805e\u304d\u53d6\u3063\u305f|\u305d\u306e\u756a\u53f7|\u672b\u5c3e)/u.test(text) && text.includes(mismatch.heardLast4)) {
+    resetStatePromptAttempts(session, "phoneMismatchConfirmation");
     clearPhoneMismatch(draft, mismatch.heardPhone);
     return continueAfterPhoneConfirmed(draft);
   }
@@ -2244,14 +2343,19 @@ function handlePhoneMismatchConfirmation(session, callerText) {
     return "\u627f\u77e5\u3057\u307e\u3057\u305f\u3002SMS\u3092\u9001\u308b\u304a\u96fb\u8a71\u756a\u53f7\u309211\u6841\u3067\u3082\u3046\u4e00\u5ea6\u3086\u3063\u304f\u308a\u304a\u9858\u3044\u3057\u307e\u3059\u3002";
   }
 
-  return buildPhoneMismatchQuestion(draft);
+  return buildStateRetryReply(
+    session,
+    "phoneMismatchConfirmation",
+    buildPhoneMismatchQuestion(draft),
+    `今おかけの番号へ送る場合は「今の番号」、伺った番号なら下4桁${mismatch.heardLast4}とお答えください。`
+  );
 }
 
 function isPhoneMismatchCallerNumberAffirmative(text) {
   const normalized = normalizeJapaneseSpeech(text).replace(/\s+/g, "");
   if (!normalized) return false;
   if (isCourseQuestion(normalized) || hasDateTimeCue(normalized)) return false;
-  return /^(?:はい|うん|ええ|大丈夫|大丈夫です|それで|それで大丈夫|それでお願いします|お願いします|お願い|OK|オーケー)$/iu.test(normalized);
+  return isPhoneCallerNumberAffirmative(normalized);
 }
 
 function mergePhoneDigits(left, right) {
@@ -4364,34 +4468,33 @@ function isCallClosingText(text) {
 }
 
 function buildShortNextQuestion(draft, availableCourses = draft.availableCourses ?? []) {
-  if (!draft.startsAt) {
+  if (!draft.course && availableCourses.length === 1) draft.course = availableCourses[0];
+  const nextField = getNextReservationField(draft);
+  if (nextField === "startsAt" && !draft.startsAt) {
     draft.awaitingField = "startsAt";
     return "\u3054\u5e0c\u671b\u306f\u3044\u3064\u9803\u3067\u3059\u304b\uff1f";
   }
-  if (draft.availabilityCheckResult?.ok !== true) {
+  if (nextField === "startsAt") {
     draft.awaitingField = "startsAt";
     return "\u3054\u5e0c\u671b\u6642\u9593\u306e\u7a7a\u304d\u3092\u78ba\u8a8d\u3057\u307e\u3059\u3002";
   }
-  if (!draft.customerName) {
+  if (nextField === "name") {
     draft.awaitingField = "name";
     return "\u304a\u540d\u524d\u3092\u304a\u9858\u3044\u3057\u307e\u3059\u3002\u82d7\u5b57\u3060\u3051\u3067\u3082\u5927\u4e08\u592b\u3067\u3059\u3002";
   }
-  if (!draft.phone) {
+  if (nextField === "phone") {
     draft.awaitingField = "phone";
     return "\u304a\u96fb\u8a71\u756a\u53f7\u3092\u304a\u9858\u3044\u3057\u307e\u3059\u3002";
   }
-  if (!draft.course && availableCourses.length === 1) {
-    draft.course = availableCourses[0];
-  }
-  if (!draft.course) {
+  if (nextField === "course") {
     draft.awaitingField = "course";
     return formatCourseMenuBrief(availableCourses) + "\u3054\u5e0c\u671b\u306f\u3069\u3061\u3089\u3067\u3059\u304b\uff1f";
   }
-  if (draft.firstVisit === undefined) {
+  if (nextField === "firstVisit") {
     draft.awaitingField = "firstVisit";
     return "\u3054\u5229\u7528\u306f\u521d\u3081\u3066\u3067\u3059\u304b\uff1f\u4ee5\u524d\u3082\u3042\u308a\u307e\u3059\u304b\uff1f";
   }
-  if (draft.attentionConfirmed !== true) {
+  if (nextField === "attention") {
     draft.awaitingField = "attention";
     return "\u6ce8\u610f\u4e8b\u9805\u3068\u5e97\u8217\u30eb\u30fc\u30eb\u306e\u78ba\u8a8d\u5f8c\u3001\u300c\u78ba\u8a8d\u3057\u307e\u3057\u305f\u300d\u3068\u304a\u4f1d\u3048\u304f\u3060\u3055\u3044\u3002";
   }
@@ -4427,7 +4530,7 @@ async function ensurePhoneConversation(session) {
       }
     })
     .catch((error) => {
-      console.warn("phone conversation write failed:", error.message);
+      recordPersistenceError(session, "conversation_upsert", error);
       return null;
     });
 
@@ -4451,7 +4554,7 @@ async function appendPhoneConversationMessage(session, role, content) {
         content: body
       }
     })
-    .catch((error) => console.warn("phone message write failed:", error.message));
+    .catch((error) => recordPersistenceError(session, `message_create_${String(role).toLowerCase()}`, error));
 
   await prisma.conversation
     .update({
@@ -4459,10 +4562,24 @@ async function appendPhoneConversationMessage(session, role, content) {
       data: {
         workflowState: session.reservationId ? "RESERVATION_CREATED" : "PHONE_ACTIVE",
         reservationDraft: session.reservationDraft ?? undefined,
-        summary: [...session.transcript, ...session.assistantTranscript].join("\n").slice(-1800) || undefined
+        summary: buildChronologicalTranscript(session).slice(-1800) || undefined
       }
     })
-    .catch(() => null);
+    .catch((error) => recordPersistenceError(session, "conversation_update", error));
+}
+
+function recordPersistenceError(session, stage, error) {
+  const reason = sanitizeOperationalError(error);
+  session.persistenceErrors ??= [];
+  if (!session.persistenceErrors.some((item) => item.stage === stage && item.reason === reason)) {
+    session.persistenceErrors.push({ stage, reason, createdAt: new Date().toISOString() });
+  }
+  session.requiredReview = true;
+  logRelay("phone_conversation_persistence_failed", {
+    callSid: session.callSid,
+    stage,
+    reason
+  });
 }
 
 async function loadStoreReceptionContext(storeId) {
@@ -5397,7 +5514,7 @@ function getJstDateTimePartsFromDate(value) {
 }
 
 function isAffirmative(text) {
-  return /(\u306f\u3044|\u5927\u4e08\u592b|\u305d\u308c\u3067|\u304a\u9858\u3044|\u3044\u3044\u3067\u3059|OK|\u30aa\u30fc\u30b1\u30fc)/iu.test(text);
+  return isNaturalAffirmative(text);
 }
 
 function buildFinalConfirmationText(draft) {
@@ -5501,6 +5618,8 @@ function extractPhoneNumber(value) {
 
 function extractFirstVisit(value, awaitingField) {
   const text = normalizeJapaneseSpeech(value);
+  const classified = extractFirstVisitAnswer(text);
+  if (classified !== undefined) return classified;
   if (/(\u521d\u56de|\u521d\u3081\u3066|\u306f\u3058\u3081\u3066|\u65b0\u898f)/u.test(text)) return true;
   if (/(\u518d\u6765|\u30ea\u30d4|\u30ea\u30d4\u30fc\u30c8|\u6765\u305f\u3053\u3068|\u5229\u7528\u3057\u305f\u3053\u3068|\u5229\u7528\u7d4c\u9a13|\u5229\u7528\u6b74|\u5229\u7528.*\u3042\u308a|\u5229\u7528.*\u3042\u308b|\u4e88\u7d04\u3057\u305f\u3053\u3068|\u4e88\u7d04\u3055\u305b|\u4f7f\u3063\u305f\u3053\u3068|\u884c\u3063\u305f\u3053\u3068|\u904e\u53bb|\u4ee5\u524d|\u524d\u306b|[2-9]\u56de\u76ee|[2-9]\u56de|\u4e8c\u56de\u76ee|\u4e8c\u56de|\u4f55\u56de|\u6570\u56de|\u9b45\u4e86\u3057\u305f\u3053\u3068)/u.test(text)) return false;
   if (awaitingField === "firstVisit") {
@@ -5512,6 +5631,7 @@ function extractFirstVisit(value, awaitingField) {
 
 function extractAttentionConfirmed(value, awaitingField) {
   const text = normalizeJapaneseSpeech(value);
+  if (awaitingField === "attention" && isAttentionConfirmationAnswer(text)) return true;
   if (/(\u6ce8\u610f\u4e8b\u9805.*\u78ba\u8a8d|\u78ba\u8a8d\u3057\u307e\u3057\u305f|\u78ba\u8a8d\u6e08\u307f|\u540c\u610f)/u.test(text)) return true;
   return awaitingField === "attention" && isAffirmative(text);
 }
@@ -5691,7 +5811,7 @@ async function createPhoneReservation(session, context) {
           customerId: customer.id,
           workflowState: "RESERVATION_CREATED",
           reservationDraft: draft,
-          summary: [...session.transcript, ...session.assistantTranscript].join("\n").slice(-1800) || undefined
+          summary: buildChronologicalTranscript(session).slice(-1800) || undefined
         }
       });
     }
@@ -6162,7 +6282,7 @@ async function sendLanguageGuardFallback(session, twilioSocket, source) {
   }
 
   session.lastAssistantText = JAPANESE_LANGUAGE_FALLBACK_REPLY;
-  session.assistantTranscript.push(`AI: ${JAPANESE_LANGUAGE_FALLBACK_REPLY}`);
+  pushAssistantTranscript(session, JAPANESE_LANGUAGE_FALLBACK_REPLY);
   sendTwilioText(twilioSocket, JAPANESE_LANGUAGE_FALLBACK_REPLY, true);
   await upsertCallLog(session, "TRANSCRIBED", "language guard: " + source);
   await flushQueuedCallerText(session, twilioSocket);
@@ -6171,7 +6291,7 @@ async function sendLanguageGuardFallback(session, twilioSocket, source) {
 async function askOpenAI(session, callerText, twilioSocket) {
   if (!openAiKey) {
     const handoff = "AI設定を確認中のため、スタッフより折り返しご案内いたします。";
-    session.assistantTranscript.push("AI: " + handoff);
+    pushAssistantTranscript(session, handoff);
     sendTwilioText(twilioSocket, handoff, true);
     sendTwilioEnd(twilioSocket, { reasonCode: "openai-not-configured", reason: "OPENAI_API_KEY is missing" });
     await upsertCallLog(session, "ESCALATED", "OPENAI_API_KEY is missing");
@@ -6216,7 +6336,7 @@ async function askOpenAI(session, callerText, twilioSocket) {
     clearResponseWatchdog(session);
     session.hasActiveOpenAiResponse = false;
     const reply = STORE_CONFIRMATION_REQUIRED_REPLY;
-    session.assistantTranscript.push("AI: " + reply);
+    pushAssistantTranscript(session, reply);
     sendTwilioText(twilioSocket, reply, true);
     sendTwilioEnd(twilioSocket, { reasonCode: "openai-realtime-error", reason });
     await upsertCallLog(session, "ESCALATED", reason);
@@ -6302,7 +6422,7 @@ function ensureOpenAI(session, twilioSocket) {
         }
         session.hasActiveOpenAiResponse = false;
         const reply = STORE_CONFIRMATION_REQUIRED_REPLY;
-        session.assistantTranscript.push(`AI: ${reply}`);
+        pushAssistantTranscript(session, reply);
         sendTwilioText(twilioSocket, reply, true);
         sendTwilioEnd(twilioSocket, { reasonCode: "openai-error", reason });
         await upsertCallLog(session, "ESCALATED", reason);
@@ -6325,7 +6445,7 @@ async function handleAssistantText(session, twilioSocket, text) {
   const normalized = sanitizeAssistantReplyForSpeech(session, text, "openai_text_done");
   if (!normalized || normalized === session.lastAssistantText) return;
   session.lastAssistantText = normalized;
-  session.assistantTranscript.push(`AI: ${normalized}`);
+  pushAssistantTranscript(session, normalized);
   sendTwilioText(twilioSocket, normalized, true);
   await upsertCallLog(session, "TRANSCRIBED");
   scheduleTwilioCallEndIfTerminal(session, twilioSocket, normalized);
@@ -6391,7 +6511,7 @@ async function finalizeAssistantResponse(session, twilioSocket, fallbackText) {
     else {
       const fallbackReply = buildNoResponseFallbackReply(session, session.lastUserUtterance ?? "");
       session.lastAssistantText = fallbackReply;
-      session.assistantTranscript.push(`AI: ${fallbackReply}`);
+      pushAssistantTranscript(session, fallbackReply);
       await appendPhoneConversationMessage(session, "AI", fallbackReply);
       sendTwilioText(twilioSocket, fallbackReply, true);
       await upsertCallLog(session, "TRANSCRIBED", "openai empty or duplicate response fallback");
@@ -6411,7 +6531,7 @@ async function finalizeAssistantResponse(session, twilioSocket, fallbackText) {
 
   session.sentAssistantText = false;
   session.lastAssistantText = normalized;
-  session.assistantTranscript.push(`AI: ${normalized}`);
+  pushAssistantTranscript(session, normalized);
   await upsertCallLog(session, "TRANSCRIBED");
   if (scheduleTwilioCallEndIfTerminal(session, twilioSocket, normalized)) return;
   await flushQueuedCallerText(session, twilioSocket);
@@ -6441,7 +6561,7 @@ function startResponseWatchdog(session, twilioSocket, callerText) {
       }
     }
     session.lastAssistantText = reply;
-    session.assistantTranscript.push(`AI: ${reply}`);
+    pushAssistantTranscript(session, reply);
     sendTwilioText(twilioSocket, reply, true);
     await upsertCallLog(session, "TRANSCRIBED", "openai response watchdog fallback");
     await flushQueuedCallerText(session, twilioSocket);
@@ -6740,7 +6860,7 @@ async function upsertCallLog(session, status, reviewNotes) {
   if (isRegressionCall(session)) return;
   if (!process.env.DATABASE_URL || !session.callSid || !session.storeId) return;
   if (status === "ESCALATED") session.requiredReview = true;
-  const transcript = [...session.transcript, ...session.assistantTranscript].join("\n");
+  const transcript = buildChronologicalTranscript(session);
   const aiSummary = transcript ? transcript.slice(-1800) : undefined;
   const durationSeconds = Number.isFinite(session.connectedAt) && session.connectedAt > 0
     ? Math.max(0, Math.round((Date.now() - session.connectedAt) / 1000))
@@ -6785,6 +6905,223 @@ async function upsertCallLog(session, status, reviewNotes) {
       });
     })
     .catch((error) => console.warn("call log write failed:", error.message));
+}
+
+async function handlePriorityReservationState(session, callerText, context) {
+  const draft = session.reservationDraft;
+  if (!draft || draft.completed || draft.cancelled) return "";
+  const field = draft.awaitingField;
+
+  if (field === "phoneMismatchConfirmation" || draft.phoneMismatchConfirmation) {
+    return handlePhoneMismatchConfirmation(session, callerText);
+  }
+
+  if (field === "nameConfirmation" && draft.pendingCustomerName) {
+    if (isNaturalAffirmative(callerText)) {
+      draft.customerName = draft.pendingCustomerName;
+      draft.pendingCustomerName = undefined;
+      resetStatePromptAttempts(session, "nameConfirmation");
+      const nextQuestion = buildShortNextQuestion(draft, context?.courses ?? draft.availableCourses ?? []);
+      return `${draft.customerName}様で承ります。${nextQuestion}`;
+    }
+    const correctedName = extractSpokenCustomerName(callerText);
+    if (correctedName && correctedName !== draft.pendingCustomerName) {
+      draft.pendingCustomerName = undefined;
+      resetStatePromptAttempts(session, "nameConfirmation");
+      return acceptOrConfirmCustomerName(session, draft, correctedName, context);
+    }
+    return buildStateRetryReply(
+      session,
+      "nameConfirmation",
+      `${draft.pendingCustomerName}様でよろしいですか？違う場合は、お名前をもう一度お願いします。`,
+      `お名前の確認です。${draft.pendingCustomerName}様なら「はい」、違う場合は名字をお願いします。`
+    );
+  }
+
+  if (field === "name" && canCollectCustomerInfo(draft)) {
+    const name = extractSpokenCustomerName(callerText);
+    if (!name) {
+      return buildStateRetryReply(
+        session,
+        "name",
+        "ご予約者様の名字をもう一度お願いします。",
+        "名字だけ、ゆっくりお願いします。"
+      );
+    }
+    return acceptOrConfirmCustomerName(session, draft, name, context);
+  }
+
+  if (field === "phone" && canCollectCustomerInfo(draft)) {
+    const phone = extractPhoneNumber(callerText);
+    if (!phone) {
+      return buildStateRetryReply(
+        session,
+        "phone",
+        "ショートメッセージを送る電話番号を、11桁でゆっくりお願いします。",
+        "電話番号を、最初のゼロから11桁でお願いします。"
+      );
+    }
+    resetStatePromptAttempts(session, "phone");
+    setDraftPhoneFromCallerInput(session, draft, phone);
+    if (draft.phoneMismatchConfirmation) return consumePhoneMismatchQuestion(draft);
+    return continueAfterPhoneConfirmed(draft);
+  }
+
+  if (field === "course") {
+    const course = findMentionedCourse(callerText, context?.courses ?? draft.availableCourses ?? []);
+    if (!course) {
+      return buildStateRetryReply(
+        session,
+        "course",
+        buildCourseChoiceQuestion(context?.courses ?? draft.availableCourses ?? []),
+        "ご希望の分数だけお願いします。例えば、60分または90分です。"
+      );
+    }
+    resetStatePromptAttempts(session, "course");
+    draft.course = course;
+    draft.awaitingField = undefined;
+    return reservationFlowReply(session, callerText, context);
+  }
+
+  if (field === "firstVisit") {
+    const firstVisit = extractFirstVisitAnswer(callerText) ?? extractFirstVisit(callerText, "firstVisit");
+    if (firstVisit === undefined) {
+      return buildStateRetryReply(
+        session,
+        "firstVisit",
+        "初めてのご利用ですか？以前もご利用がありますか？",
+        "初めてなら「初めて」、ご利用歴があれば「以前もある」とお願いします。"
+      );
+    }
+    resetStatePromptAttempts(session, "firstVisit");
+    draft.firstVisit = firstVisit;
+    draft.awaitingFinalConfirmation = false;
+    const nextQuestion = buildShortNextQuestion(draft, context?.courses ?? draft.availableCourses ?? []);
+    return nextQuestion || "来店歴を確認しました。";
+  }
+
+  if (["attention", "attentionConfirmed"].includes(field)) {
+    if (!isAttentionConfirmationAnswer(callerText)) {
+      return buildStateRetryReply(
+        session,
+        "attention",
+        "注意事項を確認済みでしたら「確認しました」とお願いします。",
+        "店舗ルールを確認済みなら「確認した」とお答えください。"
+      );
+    }
+    resetStatePromptAttempts(session, "attention");
+    draft.attentionConfirmed = true;
+    draft.awaitingField = "finalConfirmation";
+    draft.awaitingFinalConfirmation = true;
+    return buildFinalConfirmationText(draft);
+  }
+
+  if (draft.awaitingFinalConfirmation || field === "finalConfirmation") {
+    const courses = context?.courses ?? draft.availableCourses ?? [];
+    const turn = classifyFinalConfirmationTurn(callerText, courses);
+    if (turn.intent === "repeat_summary") {
+      resetStatePromptAttempts(session, "finalConfirmation");
+      return buildFinalConfirmationText(draft);
+    }
+    if (turn.intent === "confirm") {
+      resetStatePromptAttempts(session, "finalConfirmation");
+      return reservationFlowReply(session, callerText, context);
+    }
+    if (turn.intent === "change_course" && turn.course) {
+      resetStatePromptAttempts(session, "finalConfirmation");
+      draft.course = turn.course;
+      draft.availabilityCheckResult = undefined;
+      draft.awaitingFinalConfirmation = false;
+      const gate = await ensureAvailabilityGate(session, context);
+      if (!gate.ok) return gate.message;
+      draft.awaitingField = "finalConfirmation";
+      draft.awaitingFinalConfirmation = true;
+      return `${formatCourseNameForSpeech(turn.course.name)}へ変更しました。空きも確認済みです。${buildFinalConfirmationText(draft)}`;
+    }
+    if (turn.intent === "change_datetime") {
+      resetStatePromptAttempts(session, "finalConfirmation");
+      draft.startsAt = undefined;
+      draft.requested_date = undefined;
+      draft.requested_time = undefined;
+      draft.availabilityCheckResult = undefined;
+      draft.awaitingFinalConfirmation = false;
+      draft.awaitingField = "startsAt";
+      updateReservationDraft(session, callerText, context);
+      if (!draft.startsAt) return "変更後のご希望日時をお願いします。";
+      const gate = await ensureAvailabilityGate(session, context);
+      if (!gate.ok) return gate.message;
+      draft.awaitingField = "finalConfirmation";
+      draft.awaitingFinalConfirmation = true;
+      return `日時を変更しました。${buildFinalConfirmationText(draft)}`;
+    }
+    if (turn.intent === "change_phone") {
+      resetStatePromptAttempts(session, "finalConfirmation");
+      draft.phone = undefined;
+      draft.phoneMismatchConfirmation = undefined;
+      draft.awaitingFinalConfirmation = false;
+      draft.awaitingField = "phone";
+      return "変更後の電話番号を、最初のゼロから11桁でお願いします。";
+    }
+    if (turn.intent === "change_name") {
+      resetStatePromptAttempts(session, "finalConfirmation");
+      draft.customerName = undefined;
+      draft.pendingCustomerName = undefined;
+      draft.awaitingFinalConfirmation = false;
+      draft.awaitingField = "name";
+      return "変更後のお名前を、名字だけお願いします。";
+    }
+    if (turn.intent === "change_unspecified") {
+      resetStatePromptAttempts(session, "finalConfirmation");
+      return "変更する項目を、日時、コース、名前、電話番号のいずれかでお願いします。";
+    }
+    if (isRepeatReservationSummaryRequest(callerText)) return buildFinalConfirmationText(draft);
+    return buildStateRetryReply(
+      session,
+      "finalConfirmation",
+      "内容が合っていれば「はい」、変更する場合は変更する項目をお願いします。",
+      "受付を進めるなら「はい」、内容を聞き直すなら「もう一度」、変更なら項目名をお願いします。"
+    );
+  }
+
+  return "";
+}
+
+function acceptOrConfirmCustomerName(session, draft, name, context) {
+  resetStatePromptAttempts(session, "name");
+  const confidence = typeof session.lastUserTranscriptConfidence === "number"
+    ? session.lastUserTranscriptConfidence
+    : undefined;
+  if (isLowConfidenceCustomerName(name, confidence)) {
+    draft.pendingCustomerName = name;
+    draft.awaitingField = "nameConfirmation";
+    return `お名前は${name}様でよろしいですか？`;
+  }
+  draft.customerName = name;
+  draft.pendingCustomerName = undefined;
+  const nextQuestion = buildShortNextQuestion(draft, context?.courses ?? draft.availableCourses ?? []);
+  return `${name}様ですね。${nextQuestion}`;
+}
+
+function resetStatePromptAttempts(session, state) {
+  if (!session?.statePromptAttempts) return;
+  if (state) delete session.statePromptAttempts[state];
+}
+
+function buildStateRetryReply(session, state, firstRetry, secondRetry) {
+  session.statePromptAttempts ??= {};
+  const retry = advanceStateRetry(session.statePromptAttempts, state);
+  const count = retry.count;
+  logRelay("phone_ai_state_retry", {
+    callSid: session.callSid,
+    state,
+    attempt: count,
+    transcriptConfidence: session.lastUserTranscriptConfidence ?? null
+  });
+  if (!retry.shouldEscalate && count === 1) return firstRetry;
+  if (!retry.shouldEscalate) return secondRetry;
+  session.requiredReview = true;
+  session.loopFailureState = state;
+  return "確認がうまく取れないため、店舗スタッフから折り返します。お電話ありがとうございました。失礼いたします。";
 }
 
 async function recordVoiceUsageMeter(session, provider) {
@@ -6895,14 +7232,26 @@ function numberEnv(name, fallback) {
 }
 
 function buildFinalCallLogState(session) {
-  if (session.reservationId) return { status: "HOLD_CREATED", reviewNotes: undefined };
+  const diagnostics = buildSessionReviewDiagnostics(session);
+  if (session.reservationId) return { status: "HOLD_CREATED", reviewNotes: diagnostics || undefined };
   const incompleteReason = buildIncompletePhoneReservationReviewReason(session);
   if (incompleteReason) {
     session.requiredReview = true;
-    return { status: "ESCALATED", reviewNotes: incompleteReason };
+    return { status: "ESCALATED", reviewNotes: [incompleteReason, diagnostics].filter(Boolean).join(" / ") };
   }
-  if (session.requiredReview) return { status: "ESCALATED", reviewNotes: undefined };
-  return { status: "SUMMARIZED", reviewNotes: undefined };
+  if (session.requiredReview) return { status: "ESCALATED", reviewNotes: diagnostics || undefined };
+  return { status: "SUMMARIZED", reviewNotes: diagnostics || undefined };
+}
+
+function buildSessionReviewDiagnostics(session) {
+  const details = [];
+  if (session.loopFailureState) details.push(`同一確認の上限到達: ${session.loopFailureState}`);
+  if (session.persistenceErrors?.length) {
+    details.push(`履歴保存エラー: ${session.persistenceErrors.map((item) => item.stage).join("・")}`);
+  }
+  const attempts = Object.entries(session.statePromptAttempts ?? {}).filter(([, count]) => Number(count) > 0);
+  if (attempts.length) details.push(`再質問回数: ${attempts.map(([state, count]) => `${state}=${count}`).join("・")}`);
+  return details.join(" / ");
 }
 
 function buildIncompletePhoneReservationReviewReason(session) {
@@ -6919,8 +7268,8 @@ function buildIncompletePhoneReservationReviewReason(session) {
 
   const hasBookingCore = Boolean(draft.startsAt || draft.customerName || draft.phone || draft.course);
   if (!hasBookingCore) return "";
-  if (!missing.length && draft.awaitingFinalConfirmation) return "\u6700\u7d42\u78ba\u8a8d\u524d\u306b\u901a\u8a71\u7d42\u4e86";
-  if (!missing.length) return "\u4e88\u7d04\u4f5c\u6210\u524d\u306b\u901a\u8a71\u7d42\u4e86";
+  if (!missing.length && draft.awaitingFinalConfirmation) return `最終確認未成立（状態: ${draft.awaitingField ?? "finalConfirmation"}）`;
+  if (!missing.length) return `予約作成前に通話終了（状態: ${draft.awaitingField ?? "unknown"}）`;
   return "\u4e88\u7d04\u672a\u5b8c\u4e86: " + missing.join("\u30fb") + "\u672a\u53d6\u5f97";
 }
 
@@ -7055,6 +7404,11 @@ function sanitizeCallLogText(value) {
   const customerLabel = "\u304a\u5ba2\u69d8:";
   const unknownLabel = String.fromCharCode(63, 63, 63, 58);
   return String(value).replaceAll(unknownLabel, customerLabel);
+}
+
+function normalizeRealtimeVadEagerness(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return ["low", "medium", "high", "auto"].includes(normalized) ? normalized : "medium";
 }
 
 function normalizeSpeechRate(value) {
@@ -7531,7 +7885,7 @@ function escapeXml(value) {
 
 
 function buildTurnPrompt(session, callerText) {
-  const recent = [...session.transcript, ...session.assistantTranscript].slice(-10).join("\n");
+  const recent = buildRecentConversationTranscript(session, 10);
   return [
     "現在日付: " + japanDateLabel(),
     "店舗情報:",

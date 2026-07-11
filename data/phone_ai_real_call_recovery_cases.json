@@ -1,0 +1,22 @@
+{
+  "source": "2026-07-11 production call recovery regression",
+  "cases": [
+    { "scope": "phone_caller_affirmative", "utterance": "はい大丈夫です", "expected": true },
+    { "scope": "phone_caller_affirmative", "utterance": "今のでいい", "expected": true },
+    { "scope": "phone_caller_affirmative", "utterance": "今かけてる番号でお願いします", "expected": true },
+    { "scope": "phone_caller_affirmative", "utterance": "聞いた番号にして", "expected": false },
+    { "scope": "final_confirmation", "utterance": "了解", "expected": "confirm" },
+    { "scope": "final_confirmation", "utterance": "確認した", "expected": "confirm" },
+    { "scope": "final_confirmation", "utterance": "そのまま進めて", "expected": "confirm" },
+    { "scope": "final_confirmation", "utterance": "確認の内容をもう一回言って", "expected": "repeat_summary" },
+    { "scope": "final_confirmation", "utterance": "60分から90分に変更して", "expected": "change_course", "expectedDurationMin": 90 },
+    { "scope": "final_confirmation", "utterance": "90分つってんだろ", "expected": "change_course", "expectedDurationMin": 90 },
+    { "scope": "final_confirmation", "utterance": "今日の22時に変更", "expected": "change_datetime" },
+    { "scope": "first_visit", "utterance": "以前もある", "expected": false },
+    { "scope": "first_visit", "utterance": "初めてじゃない", "expected": false },
+    { "scope": "first_visit", "utterance": "初めてです", "expected": true },
+    { "scope": "attention", "utterance": "確認した", "expected": true },
+    { "scope": "name_confidence", "utterance": "あと", "expected": true },
+    { "scope": "name_confidence", "utterance": "佐藤", "expected": false }
+  ]
+}

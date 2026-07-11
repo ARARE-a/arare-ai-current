@@ -17,8 +17,8 @@ const configuredNumber = process.env.TWILIO_PHONE_NUMBER;
 if (!accountSid || !authToken || !configuredNumber) {
   throw new Error("TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER are required");
 }
-if (!["status", "realtime", "legacy"].includes(mode)) {
-  throw new Error("--mode must be status, realtime, or legacy");
+if (!["status", "realtime", "japanese", "legacy"].includes(mode)) {
+  throw new Error("--mode must be status, realtime, japanese, or legacy");
 }
 
 const client = twilio(accountSid, authToken);
@@ -28,10 +28,17 @@ if (!number) throw new Error("Configured Twilio phone number was not found");
 
 const before = summarize(number);
 if (mode === "status" || !apply) {
-  console.log(JSON.stringify({ mode, apply, changed: false, before, proposed: mode === "realtime" ? realtimeUrl : mode === "legacy" ? legacyUrl : null }, null, 2));
+  console.log(JSON.stringify({
+    mode,
+    apply,
+    changed: false,
+    before: { ...before, activeMode: detectMode(before.voiceUrl) },
+    proposed: mode === "realtime" ? realtimeUrl : ["japanese", "legacy"].includes(mode) ? legacyUrl : null
+  }, null, 2));
   if (mode !== "status" && !apply) process.exitCode = 2;
 } else {
   if (mode === "realtime") await assertRealtimeReady();
+  if (mode === "japanese") await assertJapaneseVoiceReady();
   const targetUrl = mode === "realtime" ? realtimeUrl : legacyUrl;
   const targetFallback = mode === "realtime" ? legacyUrl : number.voiceFallbackUrl || legacyUrl;
   await client.incomingPhoneNumbers(number.sid).update({
@@ -55,6 +62,22 @@ async function assertRealtimeReady() {
   if (!response.ok || !health?.ok || !media?.enabled || !media?.twilioSignatureRequired || !media?.twilioSignatureReady) {
     throw new Error("Realtime relay is not ready; Twilio route was not changed");
   }
+}
+
+async function assertJapaneseVoiceReady() {
+  const response = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(20000) });
+  const health = await response.json();
+  const japaneseVoiceReady = health?.ttsProvider === "Amazon" && health?.ttsVoice === "Takumi-Neural";
+  if (!response.ok || !health?.ok || !health?.openaiConfigured || !japaneseVoiceReady) {
+    throw new Error("Japanese GPT + Takumi voice path is not ready; Twilio route was not changed");
+  }
+}
+
+function detectMode(value) {
+  const url = String(value ?? "");
+  if (url.endsWith("/api/twilio/voice/realtime")) return "realtime";
+  if (url.endsWith("/api/twilio/voice")) return "japanese";
+  return "custom";
 }
 
 function summarize(value) {
