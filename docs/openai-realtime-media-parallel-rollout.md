@@ -36,6 +36,16 @@ https://arare-ai-voice-relay.onrender.com/api/twilio/voice/realtime
 
 HTTP methodは `POST`。現行Webhook URLは記録して、いつでも戻せる状態にする。
 
+切替前確認、Realtime切替、旧経路への復旧は次のコマンドで行う。
+
+```powershell
+npm run voice:route -- --mode=status
+npm run voice:route -- --mode=realtime --apply=true
+npm run voice:route -- --mode=legacy --apply=true
+```
+
+Realtime切替時は旧経路をTwilioのVoice Fallback URLへ残す。Realtimeのhealth・署名検証準備が揃わない場合、切替コマンドは更新せず停止する。
+
 ## 自動確認
 
 ```powershell

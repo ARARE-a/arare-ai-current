@@ -25,6 +25,7 @@
     "verify:voice-usage-meter": "node scripts/verify-voice-usage-meter.mjs",
     "verify:realtime-production-call": "node scripts/verify-realtime-production-call.mjs",
     "verify:twilio-signature": "node scripts/verify-twilio-request-validation.mjs",
+    "voice:route": "node scripts/switch-twilio-voice-route.mjs",
     "verify:phone-ai-regression": "node scripts/verify-phone-ai-regression-1000.mjs",
     "generate:conversation-quality": "node scripts/generate-conversation-quality-cases.mjs",
     "verify:conversation-quality": "node scripts/verify-final.mjs",
