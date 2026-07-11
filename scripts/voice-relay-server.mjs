@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import http from "node:http";
 import { PrismaClient } from "@prisma/client";
 import WebSocket, { WebSocketServer } from "ws";
+import { OpenAiRealtimeMediaBridge } from "./lib/openai-realtime-media-bridge.mjs";
 
 loadEnv(".env.local");
 loadEnv(".env");
@@ -10,6 +11,10 @@ loadEnv(".env");
 const port = Number(process.env.VOICE_RELAY_PORT ?? process.env.PORT ?? 8787);
 const openAiKey = process.env.OPENAI_API_KEY;
 const realtimeModel = process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2";
+const realtimeMediaEnabled = process.env.OPENAI_REALTIME_MEDIA_ENABLED === "true";
+const realtimeMediaModel = process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1";
+const realtimeMediaVoice = process.env.OPENAI_REALTIME_MEDIA_VOICE ?? "marin";
+const realtimeMediaTranscriptionModel = process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ?? "gpt-4o-transcribe";
 const sharedSecret = process.env.VOICE_RELAY_SHARED_SECRET;
 const validateTwilioSignature = process.env.VOICE_RELAY_VALIDATE_TWILIO_SIGNATURE === "true";
 const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
@@ -56,6 +61,7 @@ const VOICE_RELAY_INITIAL_LISTENING_GREETING = "お電話ありがとうござ�
 const RESPONSE_WATCHDOG_MS = Number(process.env.VOICE_RELAY_RESPONSE_WATCHDOG_MS ?? "4500");
 const prisma = new PrismaClient();
 const activeSessions = new Map();
+const activeMediaSessions = new Map();
 
 function logRelay(event, data = {}) {
   const safeData = Object.fromEntries(
@@ -249,6 +255,13 @@ const server = http.createServer(async (request, response) => {
         noPromptFirstFallbackMs,
         noPromptTerminalFallbackMs,
         activeSessions: activeSessions.size,
+        realtimeMedia: {
+          enabled: realtimeMediaEnabled,
+          model: realtimeMediaModel,
+          voice: realtimeMediaVoice,
+          transcriptionModel: realtimeMediaTranscriptionModel,
+          activeSessions: activeMediaSessions.size
+        },
         uptimeSec: Math.round(process.uptime())
       })
     );
@@ -264,11 +277,43 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "POST" && url.pathname === "/api/twilio/voice/realtime") {
+    try {
+      if (!realtimeMediaEnabled) {
+        return writeXml(
+          response,
+          [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            "<Response>",
+            "  " + sayJaBasic("現在、新しい電話AI受付は準備中です。店舗より折り返しご案内いたします。"),
+            "</Response>"
+          ].join("\n")
+        );
+      }
+      await handleTwilioVoice(request, response, "openai_realtime_media");
+    } catch (error) {
+      await handleVoiceWebhookFatalError(response, error, "twilio_realtime_voice_webhook_failed");
+    }
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/twilio/voice/connect-status") {
     try {
       await handleTwilioConnectStatus(request, response);
     } catch (error) {
       await handleVoiceWebhookFatalError(response, error, "twilio_connect_status_failed");
+    }
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/twilio/voice/media-status") {
+    try {
+      await handleTwilioMediaStatus(request, response);
+    } catch (error) {
+      logRelay("twilio_media_status_failed", {
+        reason: error instanceof Error ? error.message : String(error)
+      });
+      writeJson(response, 500, { ok: false, error: "media_status_failed" });
     }
     return;
   }
@@ -290,12 +335,21 @@ const server = http.createServer(async (request, response) => {
 });
 
 const wss = new WebSocketServer({ noServer: true });
+const mediaWss = new WebSocketServer({ noServer: true });
 
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url ?? "/", "http://localhost");
   const token = url.searchParams.get("token");
+  const isConversationRelay = url.pathname === "/conversation-relay";
+  const isRealtimeMedia = url.pathname === "/openai-realtime-media";
 
-  if (sharedSecret && token !== sharedSecret) {
+  if (!isConversationRelay && !isRealtimeMedia) {
+    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+
+  if (isConversationRelay && sharedSecret && token !== sharedSecret) {
     logRelay("conversation_relay_rejected", { reason: "invalid_shared_secret" });
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
     socket.destroy();
@@ -309,15 +363,14 @@ server.on("upgrade", (request, socket, head) => {
     return;
   }
 
-  wss.handleUpgrade(request, socket, head, (websocket) => {
-    wss.emit("connection", websocket, request);
+  const target = isRealtimeMedia ? mediaWss : wss;
+  target.handleUpgrade(request, socket, head, (websocket) => {
+    target.emit("connection", websocket, request);
   });
 });
 
-wss.on("connection", (twilioSocket) => {
-  logRelay("conversation_relay_connected");
-
-  const session = {
+function createPhoneSession() {
+  return {
     sessionId: undefined,
     callSid: undefined,
     from: undefined,
@@ -359,6 +412,12 @@ wss.on("connection", (twilioSocket) => {
     endCallHandoffData: undefined,
     endCallFallbackTimer: undefined
   };
+}
+
+wss.on("connection", (twilioSocket) => {
+  logRelay("conversation_relay_connected");
+
+  const session = createPhoneSession();
 
   twilioSocket.on("message", async (raw) => {
     let message;
@@ -428,57 +487,13 @@ wss.on("connection", (twilioSocket) => {
 
     if (message.type === "prompt") {
       if (message.last === false) return;
-      const promptStartedAt = Date.now();
       const callerText = String(message.voicePrompt ?? "").trim();
       if (!callerText) {
         await handleEmptyCallerPrompt(session, twilioSocket);
         return;
       }
-      session.consecutiveEmptyPrompts = 0;
-      try {
-        session.firstPromptReceived = true;
-        clearNoPromptWatchdog(session);
-        session.lastUserUtterance = callerText;
-        logRelay("conversation_relay_prompt", {
-          callSid: session.callSid,
-          textLength: callerText.length
-        });
-
-        session.transcript.push(`\u304a\u5ba2\u69d8: ${callerText}`);
-        await appendPhoneConversationMessage(session, "CUSTOMER", callerText);
-        await upsertCallLog(session, "TRANSCRIBED");
-        if (session.hasActiveOpenAiResponse) {
-          queueCallerText(session, callerText);
-          if (session.openai?.readyState === WebSocket.OPEN) {
-            logRelay("openai_response_cancel_for_new_prompt", { callSid: session.callSid });
-            session.openai.send(JSON.stringify({ type: "response.cancel" }));
-          }
-          return;
-        }
-        if (shouldSendFinalConfirmationAck(session, callerText)) {
-      await sendProcessingAck(session, twilioSocket, "ありがとうございます。受付処理します。");
-        }
-        const scriptedReply = await scriptedReplyFor(session, callerText);
-        if (scriptedReply) {
-          logRelay("conversation_relay_prompt_processed", {
-            callSid: session.callSid,
-            route: "scripted",
-            elapsedMs: Date.now() - promptStartedAt
-          });
-          await sendScriptedReply(session, twilioSocket, scriptedReply);
-          return;
-        }
-        logRelay("conversation_relay_prompt_processed", {
-          callSid: session.callSid,
-          route: "openai",
-          elapsedMs: Date.now() - promptStartedAt
-        });
-        await askOpenAI(session, callerText, twilioSocket);
-        return;
-      } catch (error) {
-        await handlePromptProcessingError(session, twilioSocket, error, callerText);
-        return;
-      }
+      await processCallerPrompt(session, twilioSocket, callerText, "conversation_relay");
+      return;
     }
 
     if (message.type === "interrupt") {
@@ -536,6 +551,193 @@ wss.on("connection", (twilioSocket) => {
     if (session.callSid) activeSessions.delete(session.callSid);
   });
 });
+
+mediaWss.on("connection", (twilioSocket) => {
+  logRelay("openai_realtime_media_connected");
+  const session = createPhoneSession();
+  twilioSocket.arareTransport = "openai_realtime_media";
+
+  twilioSocket.on("message", async (raw) => {
+    let message;
+    try {
+      message = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+
+    if (message.event === "start") {
+      const custom = message.start?.customParameters ?? {};
+      if (sharedSecret && stringValue(custom.relayToken) !== sharedSecret) {
+        logRelay("openai_realtime_media_rejected", { reason: "invalid_shared_secret" });
+        twilioSocket.close(1008, "invalid shared secret");
+        return;
+      }
+
+      session.sessionId = stringValue(message.start?.streamSid ?? message.streamSid);
+      session.callSid = stringValue(message.start?.callSid ?? custom.callSid ?? custom.callReference);
+      session.from = stringValue(custom.fromNumber);
+      session.to = stringValue(custom.toNumber);
+      session.publicBaseUrl = stringValue(custom.voiceRelayBaseUrl ?? custom.publicBaseUrl);
+      session.storeId = stringValue(custom.storeId);
+      session.storePhoneSettingId = stringValue(custom.storePhoneSettingId ?? custom.settingId);
+      if (!session.storeId) {
+        const resolvedRoute = await resolveRelaySetupStore({ callSid: session.callSid, toNumber: session.to });
+        session.storeId = resolvedRoute?.storeId;
+        session.storePhoneSettingId = session.storePhoneSettingId ?? resolvedRoute?.settingId;
+      }
+      if (!session.storeId) {
+        logRelay("openai_realtime_media_rejected", {
+          callSid: session.callSid,
+          to: session.to,
+          reason: "store_unresolved"
+        });
+        twilioSocket.close(1008, "store unresolved");
+        return;
+      }
+
+      session.storeContext = await loadStoreReceptionContext(session.storeId);
+      await ensurePhoneConversation(session);
+      session.setupAt = Date.now();
+      if (session.callSid) {
+        activeSessions.set(session.callSid, session);
+        activeMediaSessions.set(session.callSid, session);
+      }
+      await upsertCallLog(session, "RECEIVED");
+
+      const bridge = new OpenAiRealtimeMediaBridge({
+        twilioSocket,
+        apiKey: openAiKey,
+        model: realtimeMediaModel,
+        voice: realtimeMediaVoice,
+        transcriptionModel: realtimeMediaTranscriptionModel,
+        log: (event, data) => logRelay(event, { callSid: session.callSid, ...data }),
+        onTranscript: async (transcript) => {
+          await processCallerPrompt(session, twilioSocket, transcript, "openai_realtime_media");
+        },
+        onSpeechStarted: () => {
+          session.lastClientSpeakingAt = Date.now();
+          if (session.openai?.readyState === WebSocket.OPEN && session.hasActiveOpenAiResponse) {
+            logRelay("openai_text_reasoning_cancel_for_media_interrupt", { callSid: session.callSid });
+            session.openai.send(JSON.stringify({ type: "response.cancel" }));
+          }
+        },
+        onPlaybackComplete: () => {
+          session.lastTokensPlayedAt = Date.now();
+          endCallAfterTerminalAudioPlayed(session, twilioSocket, "media-mark");
+        },
+        onError: async (error) => {
+          if (session.mediaFailureHandled) return;
+          session.mediaFailureHandled = true;
+          session.requiredReview = true;
+          await upsertCallLog(session, "ESCALATED", `OpenAI Realtime media: ${error.message}`);
+          if (twilioSocket.readyState === WebSocket.OPEN) twilioSocket.close(1011, "realtime media failed");
+        }
+      });
+      session.mediaBridge = bridge;
+      twilioSocket.arareMediaBridge = bridge;
+      await bridge.handleTwilioMessage(message);
+
+      try {
+        await bridge.connect();
+      } catch (error) {
+        await bridge.fail(error instanceof Error ? error : new Error(String(error)));
+        return;
+      }
+
+      scheduleNoPromptWatchdog(session, twilioSocket);
+      logRelay("openai_realtime_media_setup", {
+        callSid: session.callSid,
+        from: session.from,
+        to: session.to,
+        storeId: session.storeId,
+        storePhoneSettingId: session.storePhoneSettingId,
+        model: realtimeMediaModel,
+        voice: realtimeMediaVoice,
+        transcriptionModel: realtimeMediaTranscriptionModel
+      });
+      await sendInitialListeningGreeting(session, twilioSocket);
+      if (openAiKey) {
+        ensureOpenAI(session, twilioSocket).catch((error) => {
+          logRelay("openai_text_reasoning_prewarm_failed", {
+            callSid: session.callSid,
+            reason: error instanceof Error ? error.message : String(error)
+          });
+        });
+      }
+      return;
+    }
+
+    if (message.event === "dtmf") {
+      session.transcript.push(`DTMF: ${message.dtmf?.digit ?? ""}`);
+      await upsertCallLog(session, "TRANSCRIBED");
+    }
+    await session.mediaBridge?.handleTwilioMessage(message);
+  });
+
+  twilioSocket.on("close", async () => {
+    logRelay("openai_realtime_media_closed", { callSid: session.callSid });
+    clearNoPromptWatchdog(session);
+    clearResponseWatchdog(session);
+    session.mediaBridge?.close();
+    session.openai?.close();
+    const finalCallLogState = buildFinalCallLogState(session);
+    await upsertCallLog(session, finalCallLogState.status, finalCallLogState.reviewNotes);
+    if (session.callSid) {
+      activeSessions.delete(session.callSid);
+      activeMediaSessions.delete(session.callSid);
+    }
+  });
+});
+
+async function processCallerPrompt(session, twilioSocket, callerText, transport) {
+  const promptStartedAt = Date.now();
+  session.consecutiveEmptyPrompts = 0;
+  try {
+    session.firstPromptReceived = true;
+    clearNoPromptWatchdog(session);
+    session.lastUserUtterance = callerText;
+    logRelay("phone_ai_prompt", {
+      callSid: session.callSid,
+      transport,
+      textLength: callerText.length
+    });
+
+    session.transcript.push(`お客様: ${callerText}`);
+    await appendPhoneConversationMessage(session, "CUSTOMER", callerText);
+    await upsertCallLog(session, "TRANSCRIBED");
+    if (session.hasActiveOpenAiResponse) {
+      queueCallerText(session, callerText);
+      if (session.openai?.readyState === WebSocket.OPEN) {
+        logRelay("openai_response_cancel_for_new_prompt", { callSid: session.callSid, transport });
+        session.openai.send(JSON.stringify({ type: "response.cancel" }));
+      }
+      return;
+    }
+    if (shouldSendFinalConfirmationAck(session, callerText)) {
+      await sendProcessingAck(session, twilioSocket, "ありがとうございます。受付処理します。");
+    }
+    const scriptedReply = await scriptedReplyFor(session, callerText);
+    if (scriptedReply) {
+      logRelay("phone_ai_prompt_processed", {
+        callSid: session.callSid,
+        transport,
+        route: "scripted",
+        elapsedMs: Date.now() - promptStartedAt
+      });
+      await sendScriptedReply(session, twilioSocket, scriptedReply);
+      return;
+    }
+    logRelay("phone_ai_prompt_processed", {
+      callSid: session.callSid,
+      transport,
+      route: "openai_text_reasoning",
+      elapsedMs: Date.now() - promptStartedAt
+    });
+    await askOpenAI(session, callerText, twilioSocket);
+  } catch (error) {
+    await handlePromptProcessingError(session, twilioSocket, error, callerText);
+  }
+}
 
 function scheduleNoPromptWatchdog(session, twilioSocket) {
   clearNoPromptWatchdog(session);
@@ -714,7 +916,7 @@ server.listen(port, () => {
 });
 
 
-async function handleTwilioVoice(request, response) {
+async function handleTwilioVoice(request, response, provider = "conversation_relay") {
   const form = await readForm(request);
   const from = form.get("From") || undefined;
   const to = form.get("To") || form.get("Called") || undefined;
@@ -784,6 +986,36 @@ async function handleTwilioVoice(request, response) {
   const host = request.headers["x-forwarded-host"] || request.headers.host;
   const proto = request.headers["x-forwarded-proto"] || "https";
   const publicBaseUrl = proto + "://" + host;
+  if (provider === "openai_realtime_media") {
+    const websocketUrl = buildRealtimeMediaWebSocketUrl(host);
+    const connectActionUrl = publicBaseUrl + "/api/twilio/voice/connect-status";
+    const statusCallbackUrl = publicBaseUrl + "/api/twilio/voice/media-status";
+    logRelay("twilio_voice_connect_realtime_media", {
+      callSid,
+      storeId: route.storeId,
+      storePhoneSettingId: route.settingId,
+      connectActionUrl,
+      statusCallbackUrl
+    });
+    return writeXml(
+      response,
+      realtimeMediaStreamXml({
+        websocketUrl,
+        connectActionUrl,
+        statusCallbackUrl,
+        parameters: {
+          relayToken: sharedSecret,
+          callReference: callSid,
+          storeId: route.storeId,
+          storePhoneSettingId: route.settingId,
+          voiceRelayBaseUrl: publicBaseUrl,
+          toNumber: to,
+          fromNumber: from,
+          routingMode: route.routingMode
+        }
+      })
+    );
+  }
   const websocketUrl = buildRelayWebSocketUrl(host);
   const connectActionUrl = publicBaseUrl + "/api/twilio/voice/connect-status";
 
@@ -816,6 +1048,7 @@ async function handleTwilioConnectStatus(request, response) {
   const callSid = form.get("CallSid") || undefined;
   const callStatus = form.get("CallStatus") || undefined;
   const handoffData = form.get("ConversationRelayHandoffData") || form.get("HandoffData") || undefined;
+  let shouldPlayFallback = Boolean(handoffData);
 
   logRelay("twilio_connect_status", {
     callSid,
@@ -842,6 +1075,7 @@ async function handleTwilioConnectStatus(request, response) {
       .catch(() => null);
 
     const nextRequiredReview = Boolean(handoffData) || Boolean(existingCallLog?.requiredReview);
+    shouldPlayFallback = nextRequiredReview && !existingCallLog?.reservationId;
     const nextStatus = handoffData
       ? "ESCALATED"
       : existingCallLog?.reservationId
@@ -876,7 +1110,7 @@ async function handleTwilioConnectStatus(request, response) {
     }
   }
 
-  if (handoffData) {
+  if (shouldPlayFallback) {
     return writeXml(
       response,
       [
@@ -889,6 +1123,33 @@ async function handleTwilioConnectStatus(request, response) {
   }
 
   return writeXml(response, ['<?xml version="1.0" encoding="UTF-8"?>', "<Response/>"].join("\n"));
+}
+
+async function handleTwilioMediaStatus(request, response) {
+  const form = await readForm(request);
+  const callSid = form.get("CallSid") || undefined;
+  const streamSid = form.get("StreamSid") || undefined;
+  const streamEvent = form.get("StreamEvent") || undefined;
+  const streamError = form.get("StreamError") || undefined;
+  logRelay("twilio_media_status", { callSid, streamSid, streamEvent, streamError });
+
+  if (callSid && streamEvent === "stream-error") {
+    const session = activeMediaSessions.get(callSid);
+    if (session) session.requiredReview = true;
+    await prisma.callLog
+      .updateMany({
+        where: { twilioCallSid: callSid },
+        data: {
+          status: "ESCALATED",
+          requiredReview: true,
+          reviewNotes: `Twilio Media Stream error: ${String(streamError ?? "unknown").slice(0, 400)}`
+        }
+      })
+      .catch(() => null);
+  }
+
+  response.writeHead(204);
+  response.end();
 }
 
 function mergeReviewNotes(existing, incoming) {
@@ -6167,6 +6428,10 @@ function isActiveResponseInProgressError(reason) {
 function sendTwilioText(socket, token, last = false) {
   if (socket.readyState !== WebSocket.OPEN) return;
   const speechToken = applyJapaneseSpeechPronunciationHints(token);
+  if (socket.arareTransport === "openai_realtime_media") {
+    socket.arareMediaBridge?.enqueueSpeech(speechToken, last);
+    return;
+  }
   socket.send(
     JSON.stringify({
       type: "text",
@@ -6369,6 +6634,10 @@ function inferNextAction(session) {
 
 function sendTwilioEnd(socket, handoffData) {
   if (socket.readyState !== WebSocket.OPEN) return;
+  if (socket.arareTransport === "openai_realtime_media") {
+    socket.close(1000, String(handoffData?.reasonCode ?? "completed").slice(0, 120));
+    return;
+  }
   const payload = { type: "end" };
   if (handoffData) payload.handoffData = JSON.stringify(handoffData);
   socket.send(JSON.stringify(payload));
@@ -6890,6 +7159,10 @@ function buildRelayWebSocketUrl(host) {
   return sharedSecret ? `${base}?token=${encodeURIComponent(sharedSecret)}` : base;
 }
 
+function buildRealtimeMediaWebSocketUrl(host) {
+  return `wss://${host}/openai-realtime-media`;
+}
+
 function writeXml(response, body) {
   if (response.writableEnded) return;
   response.writeHead(200, { "content-type": "application/xml" });
@@ -7017,6 +7290,23 @@ function conversationRelayXml(input) {
     "    >",
     parameterXml ? "      " + parameterXml : "",
     "    </ConversationRelay>",
+    "  </Connect>",
+    "</Response>"
+  ].join("\n");
+}
+
+function realtimeMediaStreamXml(input) {
+  const parameterXml = Object.entries(input.parameters ?? {})
+    .filter((entry) => Boolean(entry[1]))
+    .map(([name, value]) => '<Parameter name="' + escapeXml(name) + '" value="' + escapeXml(value) + '"/>')
+    .join("\n      ");
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    "<Response>",
+    '  <Connect action="' + escapeXml(input.connectActionUrl) + '" method="POST">',
+    '    <Stream url="' + escapeXml(input.websocketUrl) + '" statusCallback="' + escapeXml(input.statusCallbackUrl) + '" statusCallbackMethod="POST">',
+    parameterXml ? "      " + parameterXml : "",
+    "    </Stream>",
     "  </Connect>",
     "</Response>"
   ].join("\n");

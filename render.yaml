@@ -14,6 +14,14 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: OPENAI_REALTIME_MEDIA_ENABLED
+        value: "false"
+      - key: OPENAI_REALTIME_MEDIA_MODEL
+        value: gpt-realtime-2.1
+      - key: OPENAI_REALTIME_MEDIA_VOICE
+        value: marin
+      - key: OPENAI_REALTIME_TRANSCRIPTION_MODEL
+        value: gpt-4o-transcribe
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN

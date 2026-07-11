@@ -21,6 +21,7 @@
     "verify:production-parity": "node scripts/verify-production-parity.mjs",
     "verify:one-day": "node scripts/verify-one-day-readiness.mjs",
     "verify:voice-relay": "node scripts/verify-voice-relay.mjs",
+    "verify:realtime-media": "node scripts/verify-openai-realtime-media.mjs",
     "verify:phone-ai-regression": "node scripts/verify-phone-ai-regression-1000.mjs",
     "generate:conversation-quality": "node scripts/generate-conversation-quality-cases.mjs",
     "verify:conversation-quality": "node scripts/verify-final.mjs",
