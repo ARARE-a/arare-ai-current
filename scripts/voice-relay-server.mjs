@@ -4,6 +4,11 @@ import http from "node:http";
 import { PrismaClient } from "@prisma/client";
 import WebSocket, { WebSocketServer } from "ws";
 import { OpenAiRealtimeMediaBridge } from "./lib/openai-realtime-media-bridge.mjs";
+import {
+  addVoiceUsage,
+  buildVoiceCostSummary,
+  createVoiceUsageAccumulator
+} from "./lib/voice-usage-meter.mjs";
 
 loadEnv(".env.local");
 loadEnv(".env");
@@ -15,6 +20,21 @@ const realtimeMediaEnabled = process.env.OPENAI_REALTIME_MEDIA_ENABLED === "true
 const realtimeMediaModel = process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1";
 const realtimeMediaVoice = process.env.OPENAI_REALTIME_MEDIA_VOICE ?? "marin";
 const realtimeMediaTranscriptionModel = process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ?? "gpt-4o-transcribe";
+const voiceCostPricing = {
+  realtimeTextInputUsdPerMToken: numberEnv("OPENAI_REALTIME_TEXT_INPUT_USD_PER_MTOK", 4),
+  realtimeCachedInputUsdPerMToken: numberEnv("OPENAI_REALTIME_CACHED_INPUT_USD_PER_MTOK", 0.4),
+  realtimeAudioInputUsdPerMToken: numberEnv("OPENAI_REALTIME_AUDIO_INPUT_USD_PER_MTOK", 32),
+  realtimeTextOutputUsdPerMToken: numberEnv("OPENAI_REALTIME_TEXT_OUTPUT_USD_PER_MTOK", 24),
+  realtimeAudioOutputUsdPerMToken: numberEnv("OPENAI_REALTIME_AUDIO_OUTPUT_USD_PER_MTOK", 64),
+  transcriptionTextInputUsdPerMToken: numberEnv("OPENAI_TRANSCRIPTION_TEXT_INPUT_USD_PER_MTOK", 2.5),
+  transcriptionAudioInputUsdPerMToken: numberEnv("OPENAI_TRANSCRIPTION_AUDIO_INPUT_USD_PER_MTOK", 2.5),
+  transcriptionTextOutputUsdPerMToken: numberEnv("OPENAI_TRANSCRIPTION_TEXT_OUTPUT_USD_PER_MTOK", 10),
+  twilioInboundVoiceUsdPerMinute: numberEnv("TWILIO_INBOUND_VOICE_USD_PER_MINUTE", 0.01),
+  twilioMediaStreamsUsdPerMinute: numberEnv("TWILIO_MEDIA_STREAMS_USD_PER_MINUTE", 0.0044),
+  twilioConversationRelayUsdPerMinute: numberEnv("TWILIO_CONVERSATION_RELAY_USD_PER_MINUTE", 0.07),
+  usdToJpy: numberEnv("VOICE_RELAY_USD_TO_JPY", 150),
+  pricingCheckedAt: "2026-07-11"
+};
 const sharedSecret = process.env.VOICE_RELAY_SHARED_SECRET;
 const validateTwilioSignature = process.env.VOICE_RELAY_VALIDATE_TWILIO_SIGNATURE === "true";
 const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
@@ -262,6 +282,13 @@ const server = http.createServer(async (request, response) => {
           transcriptionModel: realtimeMediaTranscriptionModel,
           activeSessions: activeMediaSessions.size
         },
+        usageMeter: {
+          rawOpenAiUsageReady: true,
+          idempotentMonthlyMeterReady: true,
+          billingAmountConfirmed: false,
+          pricingCheckedAt: voiceCostPricing.pricingCheckedAt,
+          usdToJpy: voiceCostPricing.usdToJpy
+        },
         uptimeSec: Math.round(process.uptime())
       })
     );
@@ -410,7 +437,9 @@ function createPhoneSession() {
     endCallPendingAfterTokensPlayed: false,
     endCallEarliestAt: 0,
     endCallHandoffData: undefined,
-    endCallFallbackTimer: undefined
+    endCallFallbackTimer: undefined,
+    usageAccumulator: createVoiceUsageAccumulator(),
+    usageMeterRecorded: false
   };
 }
 
@@ -547,6 +576,7 @@ wss.on("connection", (twilioSocket) => {
     clearResponseWatchdog(session);
     const finalCallLogState = buildFinalCallLogState(session);
     await upsertCallLog(session, finalCallLogState.status, finalCallLogState.reviewNotes);
+    await recordVoiceUsageMeter(session, "conversation_relay");
     session.openai?.close();
     if (session.callSid) activeSessions.delete(session.callSid);
   });
@@ -613,6 +643,9 @@ mediaWss.on("connection", (twilioSocket) => {
         log: (event, data) => logRelay(event, { callSid: session.callSid, ...data }),
         onTranscript: async (transcript) => {
           await processCallerPrompt(session, twilioSocket, transcript, "openai_realtime_media");
+        },
+        onUsage: (source, usage) => {
+          addVoiceUsage(session.usageAccumulator, source, usage);
         },
         onSpeechStarted: () => {
           session.lastClientSpeakingAt = Date.now();
@@ -682,6 +715,7 @@ mediaWss.on("connection", (twilioSocket) => {
     session.openai?.close();
     const finalCallLogState = buildFinalCallLogState(session);
     await upsertCallLog(session, finalCallLogState.status, finalCallLogState.reviewNotes);
+    await recordVoiceUsageMeter(session, "openai_realtime_media");
     if (session.callSid) {
       activeSessions.delete(session.callSid);
       activeMediaSessions.delete(session.callSid);
@@ -6186,6 +6220,7 @@ function ensureOpenAI(session, twilioSocket) {
       }
 
       if (event.type === "response.done") {
+        addVoiceUsage(session.usageAccumulator, "text_reasoning", event.response?.usage);
         const fallbackText = extractResponseText(event.response).trim();
         await finalizeAssistantResponse(session, twilioSocket, fallbackText);
       }
@@ -6692,6 +6727,113 @@ async function upsertCallLog(session, status, reviewNotes) {
       });
     })
     .catch((error) => console.warn("call log write failed:", error.message));
+}
+
+async function recordVoiceUsageMeter(session, provider) {
+  if (session.usageMeterRecorded || isRegressionCall(session)) return;
+  if (!process.env.DATABASE_URL || !session.callSid || !session.storeId) return;
+  const durationSeconds = Number.isFinite(session.connectedAt) && session.connectedAt > 0
+    ? Math.max(1, Math.round((Date.now() - session.connectedAt) / 1000))
+    : 0;
+  if (!durationSeconds) return;
+
+  const summary = buildVoiceCostSummary({
+    accumulator: session.usageAccumulator,
+    durationSeconds,
+    provider,
+    pricing: voiceCostPricing
+  });
+  const recordedAt = new Date();
+  const period = usagePeriod(recordedAt);
+
+  try {
+    const recorded = await prisma.$transaction(async (tx) => {
+      const alreadyRecorded = await tx.callLog.findFirst({
+        where: { twilioCallSid: session.callSid, usageMeterRecordedAt: { not: null } },
+        select: { id: true }
+      });
+      if (alreadyRecorded) return false;
+
+      const callLog = await tx.callLog.findFirst({
+        where: { twilioCallSid: session.callSid },
+        select: { id: true }
+      });
+      if (!callLog) return false;
+
+      const claimed = await tx.callLog.updateMany({
+        where: { twilioCallSid: session.callSid, usageMeterRecordedAt: null },
+        data: { durationSeconds, usageMeterRecordedAt: recordedAt }
+      });
+      if (claimed.count < 1) return false;
+
+      await tx.storeUsageMeter.upsert({
+        where: { storeId_period: { storeId: session.storeId, period } },
+        update: {
+          voiceCallCount: { increment: 1 },
+          voiceCallSeconds: { increment: durationSeconds },
+          aiSessionCount: { increment: 1 },
+          estimatedCost: { increment: summary.estimatedCost.totalJpy }
+        },
+        create: {
+          storeId: session.storeId,
+          period,
+          voiceCallCount: 1,
+          voiceCallSeconds: durationSeconds,
+          aiSessionCount: 1,
+          estimatedCost: summary.estimatedCost.totalJpy
+        }
+      });
+
+      await tx.storePhoneEvent.create({
+        data: {
+          storeId: session.storeId,
+          storePhoneSettingId: session.storePhoneSettingId,
+          eventType: "VOICE_AI_USAGE_RECORDED",
+          after: {
+            callSid: session.callSid,
+            models: {
+              textReasoning: realtimeModel,
+              realtimeMedia: provider === "openai_realtime_media" ? realtimeMediaModel : null,
+              transcription: provider === "openai_realtime_media" ? realtimeMediaTranscriptionModel : null
+            },
+            ...summary
+          }
+        }
+      });
+      return true;
+    });
+
+    session.usageMeterRecorded = recorded;
+    logRelay(recorded ? "voice_usage_meter_recorded" : "voice_usage_meter_already_recorded", {
+      callSid: session.callSid,
+      provider,
+      durationSeconds,
+      totalUsdMicros: summary.estimatedCost.totalUsdMicros,
+      estimatedCostJpy: summary.estimatedCost.totalJpy
+    });
+  } catch (error) {
+    logRelay("voice_usage_meter_failed", {
+      callSid: session.callSid,
+      provider,
+      reason: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+function usagePeriod(date) {
+  const parts = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit"
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value ?? String(date.getUTCFullYear());
+  const month = parts.find((part) => part.type === "month")?.value ?? String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function numberEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
 function buildFinalCallLogState(session) {

@@ -13,6 +13,7 @@ export class OpenAiRealtimeMediaBridge {
     this.openAiSocketFactory = options.openAiSocketFactory ?? createOpenAiSocket;
     this.log = options.log ?? (() => {});
     this.onTranscript = options.onTranscript ?? (async () => {});
+    this.onUsage = options.onUsage ?? (() => {});
     this.onSpeechStarted = options.onSpeechStarted ?? (() => {});
     this.onPlaybackComplete = options.onPlaybackComplete ?? (() => {});
     this.onError = options.onError ?? (async () => {});
@@ -201,6 +202,7 @@ export class OpenAiRealtimeMediaBridge {
 
     if (event.type === "conversation.item.input_audio_transcription.completed") {
       const transcript = String(event.transcript ?? "").trim();
+      if (event.usage) this.onUsage("transcription", event.usage);
       if (transcript) await this.onTranscript(transcript, event.item_id);
       return;
     }
@@ -221,6 +223,7 @@ export class OpenAiRealtimeMediaBridge {
     }
 
     if (event.type === "response.done") {
+      if (event.response?.usage) this.onUsage("realtime_media", event.response.usage);
       if (this.responseTimer) clearTimeout(this.responseTimer);
       this.responseTimer = undefined;
       this.activeSpeech = false;

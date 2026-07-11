@@ -28,6 +28,7 @@ const twilio = new FakeSocket();
 twilio.open();
 const openai = new FakeSocket();
 const transcripts = [];
+const usageEvents = [];
 let playbackMarks = 0;
 const bridge = new OpenAiRealtimeMediaBridge({
   twilioSocket: twilio,
@@ -40,6 +41,7 @@ const bridge = new OpenAiRealtimeMediaBridge({
     return openai;
   },
   onTranscript: async (text) => transcripts.push(text),
+  onUsage: (source, usage) => usageEvents.push({ source, usage }),
   onPlaybackComplete: () => {
     playbackMarks += 1;
   }
@@ -65,7 +67,8 @@ openai.emit(
   JSON.stringify({
     type: "conversation.item.input_audio_transcription.completed",
     item_id: "item_1",
-    transcript: "明日の21時で空いていますか"
+    transcript: "明日の21時で空いていますか",
+    usage: { input_tokens: 13, output_tokens: 9, total_tokens: 22, input_token_details: { audio_tokens: 13 } }
   })
 );
 await new Promise((resolve) => setImmediate(resolve));
@@ -83,9 +86,25 @@ assert.deepEqual(twilio.sent.at(-1), {
   media: { payload: "PCMU_OUTPUT" }
 });
 
-openai.emit("message", JSON.stringify({ type: "response.done", response: { status: "completed" } }));
+openai.emit(
+  "message",
+  JSON.stringify({
+    type: "response.done",
+    response: {
+      status: "completed",
+      usage: {
+        input_tokens: 20,
+        output_tokens: 30,
+        total_tokens: 50,
+        input_token_details: { text_tokens: 20, audio_tokens: 0, cached_tokens: 0 },
+        output_token_details: { text_tokens: 5, audio_tokens: 25 }
+      }
+    }
+  })
+);
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(twilio.sent.at(-1).event, "mark");
+assert.deepEqual(usageEvents.map((event) => event.source), ["transcription", "realtime_media"]);
 await bridge.handleTwilioMessage(twilio.sent.at(-1));
 assert.equal(playbackMarks, 1);
 

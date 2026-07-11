@@ -22,6 +22,8 @@ services:
         value: marin
       - key: OPENAI_REALTIME_TRANSCRIPTION_MODEL
         value: gpt-4o-transcribe
+      - key: VOICE_RELAY_USD_TO_JPY
+        value: "150"
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
