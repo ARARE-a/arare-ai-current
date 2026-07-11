@@ -20,6 +20,10 @@ if (
   !health?.ok ||
   !health?.databaseHealth?.ok ||
   !health?.realtimeAgent?.enabled ||
+  health?.realtimeAgent?.conversationFlowVersion !== 2 ||
+  health?.realtimeAgent?.firstVisitExplicitAnswerGateReady !== true ||
+  health?.realtimeAgent?.forcedToolQuestionReady !== true ||
+  health?.realtimeAgent?.ambiguousConfirmationGuardReady !== true ||
   health?.realtimeAgent?.scriptedReplyPrimary !== false
 ) {
   throw new Error("Production Realtime agent health gate is not ready");
@@ -59,6 +63,10 @@ const result = await runAgentSmoke({ websocketUrl, websocketSignature, customPar
 const report = {
   webhookStatus: webhookResponse.status,
   healthArchitecture: health.realtimeAgent.architecture,
+  conversationFlowVersion: health.realtimeAgent.conversationFlowVersion,
+  firstVisitExplicitAnswerGateReady: health.realtimeAgent.firstVisitExplicitAnswerGateReady,
+  forcedToolQuestionReady: health.realtimeAgent.forcedToolQuestionReady,
+  ambiguousConfirmationGuardReady: health.realtimeAgent.ambiguousConfirmationGuardReady,
   scriptedReplyPrimary: health.realtimeAgent.scriptedReplyPrimary,
   storeBound: Boolean(customParameters.storeId),
   websocketOpened: result.opened,
