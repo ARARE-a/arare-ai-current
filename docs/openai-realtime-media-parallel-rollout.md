@@ -44,6 +44,20 @@ npm run verify:voice-relay
 npm run verify:final
 ```
 
+実電話後はTwilioのCallSidを指定し、外部ログとDBを一括照合する。
+
+```powershell
+npm run verify:realtime-production-call -- --call-sid=CAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+SMS実端末受信とログイン後4画面の表示一致まで確認した最終実行では、確認事実をフラグで付ける。
+
+```powershell
+npm run verify:realtime-production-call -- --call-sid=CAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --sms-received=true --ui-matched=true
+```
+
+フラグが無い項目は推測でPASSにせず `UNVERIFIED` とする。
+
 ## 原価記録
 
 - OpenAIの `response.done.usage` と文字起こし完了イベントの `usage` を通話中に集計する。
