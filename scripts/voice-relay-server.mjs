@@ -328,6 +328,7 @@ const server = http.createServer(async (request, response) => {
         noPromptFirstFallbackMs,
         noPromptTerminalFallbackMs,
         activeSessions: activeSessions.size,
+        legacyOpenAiPrewarmEnabled: false,
         realtimeMedia: {
           enabled: realtimeMediaEnabled,
           model: realtimeMediaModel,
@@ -721,14 +722,6 @@ wss.on("connection", (twilioSocket) => {
 
       await upsertCallLog(session, "RECEIVED");
       await sendInitialListeningGreeting(session, twilioSocket);
-      if (openAiKey && !isRegressionCall(session)) {
-        ensureOpenAI(session, twilioSocket).catch((error) => {
-          logRelay("openai_prewarm_failed", {
-            callSid: session.callSid,
-            reason: error instanceof Error ? error.message : String(error)
-          });
-        });
-      }
       return;
     }
 

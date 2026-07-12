@@ -20,6 +20,7 @@ if (
   !healthResponse.ok ||
   !health?.ok ||
   !health?.databaseHealth?.ok ||
+  health?.legacyOpenAiPrewarmEnabled !== false ||
   health?.legacyTransportSecurity?.twilioSignatureRequired !== true ||
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
@@ -135,6 +136,7 @@ if (postSmokeHealth?.realtimeAgent?.circuitBreakerOpen === true) {
 }
 const report = {
   webhookStatus: webhookResponse.status,
+  legacyOpenAiPrewarmEnabled: health.legacyOpenAiPrewarmEnabled,
   unsignedLegacyWebSocketRejected,
   healthArchitecture: health.realtimeAgent.architecture,
   conversationFlowVersion: health.realtimeAgent.conversationFlowVersion,
