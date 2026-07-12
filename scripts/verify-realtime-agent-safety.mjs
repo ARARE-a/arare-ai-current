@@ -6,6 +6,7 @@ process.env.DEMO_AUTO_BUSINESS_HOUR_SHIFTS_ENABLED = "false";
 const {
   buildRealtimeAgentAvailabilityKey,
   buildRealtimeAgentInstructions,
+  buildRealtimeAgentOutageFallbackXml,
   buildRealtimeAgentTools,
   classifyRealtimeAgentFailure,
   closeRealtimeAgentCircuit,
@@ -76,6 +77,12 @@ assert.match(instructions, /commentaryフェーズは内部処理専用/);
 assert.doesNotMatch(instructions, /next_question|message_for_customer|spoken_summary|spoken_reply/);
 assert.equal(classifyRealtimeAgentFailure(new Error("insufficient_quota")), "OPENAI_INSUFFICIENT_QUOTA");
 assert.equal(classifyRealtimeAgentFailure(new Error("rate_limit_exceeded")), "OPENAI_RATE_LIMIT");
+const outageFallbackXml = buildRealtimeAgentOutageFallbackXml();
+assert.match(outageFallbackXml, /<Say\b/u);
+assert.match(outageFallbackXml, /公式LINEからご連絡/u);
+assert.match(outageFallbackXml, /<Hangup\/>/u);
+assert.doesNotMatch(outageFallbackXml, /ConversationRelay|<Stream\b|<Redirect\b/u);
+assert.doesNotMatch(outageFallbackXml, /店舗に確認して折り返し|スタッフより折り返し/u);
 closeRealtimeAgentCircuit();
 assert.equal(isRealtimeAgentCircuitOpen(), false);
 openRealtimeAgentCircuit("OPENAI_INSUFFICIENT_QUOTA");
@@ -210,7 +217,7 @@ assert.equal(result.terminal, true);
 assert.equal(result.reservation_status, "tentative");
 assertNoScriptedSpeechFields(result);
 
-console.log(JSON.stringify({ ok: true, checks: 66 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 71 }, null, 2));
 
 function assertNoScriptedSpeechFields(value) {
   const forbidden = new Set(["next_question", "message_for_customer", "spoken_summary", "spoken_reply"]);

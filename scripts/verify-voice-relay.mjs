@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import twilio from "twilio";
 import WebSocket from "ws";
 
 loadEnv(".env.local");
@@ -27,7 +28,15 @@ function verifyRelay() {
       finish(false, new Error(`Voice relay verification timed out after ${timeoutMs}ms. Received: ${JSON.stringify(received)}`));
     }, timeoutMs);
 
-    const ws = new WebSocket(relayUrl);
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const websocketSignature = authToken ? twilio.getExpectedTwilioSignature(authToken, relayUrl, {}) : undefined;
+    const forwardedProto = new URL(relayUrl).protocol === "ws:" ? "http" : "https";
+    const ws = new WebSocket(relayUrl, {
+      headers: {
+        "x-forwarded-proto": forwardedProto,
+        ...(websocketSignature ? { "x-twilio-signature": websocketSignature } : {})
+      }
+    });
 
     function finish(ok, value) {
       if (settled) return;
@@ -86,9 +95,12 @@ function verifyRelay() {
       const hasFinal = aiTextMessages.some((item) => item.last === true) || received.some((item) => item.type === "end");
       if (hasText && hasFinal) {
         const responseText = aiTextMessages.map((item) => String(item.token ?? "")).join("");
-        const availabilityAnswered = /(確認します|ご案内可能|承れません|空き|候補|最短|予約可能|店舗に確認)/u.test(responseText);
+        const unavailableFallback = /(?:確認が必要です。)?店舗に確認して折り返し|AI設定を確認中|スタッフより折り返し/u.test(
+          responseText
+        );
+        const availabilityAnswered = /(ご案内可能|承れません|空き|候補|最短|予約可能)/u.test(responseText);
         const courseInfoOnly = /(ご予約なら希望日時|希望日時をお願いします|コース情報)/u.test(responseText) && !availabilityAnswered;
-        if (!availabilityAnswered || courseInfoOnly) {
+        if (unavailableFallback || !availabilityAnswered || courseInfoOnly) {
           finish(false, new Error(`Voice relay did not answer availability after prompt. Response: ${responseText}`));
           return;
         }

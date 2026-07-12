@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import twilio from "twilio";
 import WebSocket from "ws";
 
 loadEnv(".env.local");
@@ -113,7 +114,15 @@ function sendPrompt({ callSid, text, received }) {
     const tokens = [];
     let promptSent = false;
     let promptTimer;
-    const ws = new WebSocket(relayUrl);
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const websocketSignature = authToken ? twilio.getExpectedTwilioSignature(authToken, relayUrl, {}) : undefined;
+    const forwardedProto = new URL(relayUrl).protocol === "ws:" ? "http" : "https";
+    const ws = new WebSocket(relayUrl, {
+      headers: {
+        "x-forwarded-proto": forwardedProto,
+        ...(websocketSignature ? { "x-twilio-signature": websocketSignature } : {})
+      }
+    });
     const sendVoicePrompt = () => {
       if (promptSent || ws.readyState !== WebSocket.OPEN) return;
       promptSent = true;

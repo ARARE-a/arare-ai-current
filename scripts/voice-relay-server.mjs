@@ -114,6 +114,8 @@ const JAPANESE_ONLY_INSTRUCTION = [
 const JAPANESE_LANGUAGE_FALLBACK_REPLY =
   "すみません。日本語でご案内します。ご予約でしたら、ご希望の日時とコースをもう一度お聞かせください。";
 const STORE_CONFIRMATION_REQUIRED_REPLY = "確認が必要です。店舗に確認して折り返します。";
+const REALTIME_AGENT_OUTAGE_REPLY =
+  "申し訳ありません。現在、電話AI受付を一時的にご利用いただけません。お手数ですが、店舗の公式LINEからご連絡ください。";
 const VOICE_RELAY_TWIML_WELCOME_GREETING = "";
 const VOICE_RELAY_INITIAL_LISTENING_GREETING = "お電話ありがとうございます。ご希望をどうぞ。";
 const RESPONSE_WATCHDOG_MS = Number(process.env.VOICE_RELAY_RESPONSE_WATCHDOG_MS ?? "4500");
@@ -377,7 +379,10 @@ const server = http.createServer(async (request, response) => {
             ? realtimeAgentCircuitReason
             : null,
           staleTruncateRecoveryReady: true,
-          automaticLegacyFailoverReady: true,
+          automaticLegacyFailoverReady: false,
+          independentOutageFallbackReady: true,
+          outageFallbackDependsOnOpenAi: false,
+          outageFallbackPromisesCallback: false,
           duplicateToolCallGuardReady: true,
           rollbackRouteReady: true,
           twilioSignatureRequired: realtimeRequireTwilioSignature,
@@ -398,6 +403,11 @@ const server = http.createServer(async (request, response) => {
           pricingCheckedAt: voiceCostPricing.pricingCheckedAt,
           usdToJpy: voiceCostPricing.usdToJpy
         },
+        legacyTransportSecurity: {
+          twilioSignatureRequired: validateTwilioSignature,
+          twilioSignatureReady: Boolean(twilioAuthToken),
+          unsignedWebSocketAllowed: !validateTwilioSignature && !sharedSecret
+        },
         uptimeSec: Math.round(process.uptime())
       })
     );
@@ -406,6 +416,10 @@ const server = http.createServer(async (request, response) => {
 
   if (request.method === "POST" && url.pathname === "/api/twilio/voice") {
     try {
+      if (validateTwilioSignature && !(await isValidTwilioHttpRequest(request))) {
+        logRelay("twilio_legacy_voice_rejected", { reason: "invalid_twilio_signature" });
+        return writeForbidden(response);
+      }
       await handleTwilioVoice(request, response);
     } catch (error) {
       await handleVoiceWebhookFatalError(response, error, "twilio_voice_webhook_failed");
@@ -459,7 +473,7 @@ const server = http.createServer(async (request, response) => {
           reason: realtimeAgentCircuitReason,
           retryAt: new Date(realtimeAgentCircuitOpenUntil).toISOString()
         });
-        await handleTwilioVoice(request, response, "conversation_relay");
+        await handleTwilioVoice(request, response, "safe_outage");
       } else {
         await handleTwilioVoice(request, response, "openai_realtime_agent");
       }
@@ -1423,6 +1437,27 @@ async function handleTwilioVoice(request, response, provider = "conversation_rel
     return writeXml(response, body);
   }
 
+  if (provider === "safe_outage") {
+    logRelay("twilio_realtime_agent_safe_outage_fallback", {
+      callSid,
+      storeId: route.storeId,
+      reason: realtimeAgentCircuitReason || lastRealtimeAgentFailureCode || "realtime_agent_unavailable"
+    });
+    if (callSid && !isRegressionCall(callSid)) {
+      await prisma.callLog
+        .updateMany({
+          where: { twilioCallSid: callSid },
+          data: {
+            status: "ESCALATED",
+            requiredReview: true,
+            reviewNotes: "電話AI障害時の安全案内へ切替"
+          }
+        })
+        .catch(() => null);
+    }
+    return writeXml(response, buildRealtimeAgentOutageFallbackXml());
+  }
+
   const host = request.headers["x-forwarded-host"] || request.headers.host;
   const proto = request.headers["x-forwarded-proto"] || "https";
   const publicBaseUrl = proto + "://" + host;
@@ -1584,20 +1619,8 @@ async function handleTwilioConnectStatus(request, response) {
 
   if (shouldPlayFallback) {
     if (source === "realtime-agent" || source === "realtime-media") {
-      const host = request.headers["x-forwarded-host"] || request.headers.host;
-      const proto = request.headers["x-forwarded-proto"] || "https";
-      const fallbackUrl = `${proto}://${host}/api/twilio/voice?fallbackFrom=${encodeURIComponent(source)}`;
-      logRelay("twilio_realtime_automatic_legacy_failover", { callSid, source });
-      return writeXml(
-        response,
-        [
-          '<?xml version="1.0" encoding="UTF-8"?>',
-          "<Response>",
-          "  " + sayJa("接続を切り替えます。そのままお待ちください。"),
-          '  <Redirect method="POST">' + escapeXml(fallbackUrl) + "</Redirect>",
-          "</Response>"
-        ].join("\n")
-      );
+      logRelay("twilio_realtime_safe_outage_fallback", { callSid, source });
+      return writeXml(response, buildRealtimeAgentOutageFallbackXml());
     }
     return writeXml(
       response,
@@ -8341,6 +8364,15 @@ function sayJa(text) {
 function sayJaBasic(text) {
   return '<Say language="ja-JP">' + escapeXml(text) + "</Say>";
 }
+function buildRealtimeAgentOutageFallbackXml() {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    "<Response>",
+    "  " + sayJa(REALTIME_AGENT_OUTAGE_REPLY),
+    "  <Hangup/>",
+    "</Response>"
+  ].join("\n");
+}
 function escapeXml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -9646,6 +9678,7 @@ function loadEnv(path) {
 }
 
 export {
+  buildRealtimeAgentOutageFallbackXml,
   buildRealtimeAgentInstructions,
   buildRealtimeAgentTools,
   buildRealtimeAgentAvailabilityKey,

@@ -51,7 +51,7 @@ services:
       - key: PUBLIC_APP_URL
         value: https://arare-ai-three.vercel.app
       - key: VOICE_RELAY_VALIDATE_TWILIO_SIGNATURE
-        value: "false"
+        value: "true"
       - key: VOICE_RELAY_TTS_PROVIDER
         value: Amazon
       - key: VOICE_RELAY_TTS_VOICE

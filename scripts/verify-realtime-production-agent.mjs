@@ -20,6 +20,9 @@ if (
   !healthResponse.ok ||
   !health?.ok ||
   !health?.databaseHealth?.ok ||
+  health?.legacyTransportSecurity?.twilioSignatureRequired !== true ||
+  health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
+  health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
   health?.realtimeAgent?.conversationFlowVersion !== 5 ||
   health?.realtimeAgent?.firstVisitExplicitAnswerGateReady !== true ||
@@ -37,11 +40,16 @@ if (
   health?.realtimeAgent?.toolLoopGuardReady !== true ||
   health?.realtimeAgent?.circuitBreakerReady !== true ||
   health?.realtimeAgent?.staleTruncateRecoveryReady !== true ||
-  health?.realtimeAgent?.automaticLegacyFailoverReady !== true ||
+  health?.realtimeAgent?.independentOutageFallbackReady !== true ||
+  health?.realtimeAgent?.outageFallbackDependsOnOpenAi !== false ||
+  health?.realtimeAgent?.outageFallbackPromisesCallback !== false ||
   health?.realtimeAgent?.scriptedReplyPrimary !== false
 ) {
   throw new Error("Production Realtime agent health gate is not ready");
 }
+
+const unsignedLegacyWebsocketUrl = `${baseUrl.replace(/^http/u, "ws")}/conversation-relay`;
+const unsignedLegacyWebSocketRejected = await verifyUnsignedLegacyWebSocketRejected(unsignedLegacyWebsocketUrl);
 
 const callSid = `CA_REGRESSION_AGENT_${Date.now()}`;
 const streamSid = `MZ_REGRESSION_AGENT_${Date.now()}`;
@@ -88,10 +96,12 @@ const failoverResponse = await fetch(`${baseUrl}/api/twilio/voice/connect-status
   signal: AbortSignal.timeout(30000)
 });
 const failoverTwiml = await failoverResponse.text();
-const automaticFailoverRedirect = failoverResponse.ok &&
-  /<Redirect\b/i.test(failoverTwiml) &&
-  /\/api\/twilio\/voice\?fallbackFrom=realtime-agent/i.test(failoverTwiml) &&
-  !/店舗に確認して折り返し/u.test(failoverTwiml);
+const automaticSafeOutageFallback = failoverResponse.ok &&
+  /<Say\b/i.test(failoverTwiml) &&
+  /公式LINEからご連絡/u.test(failoverTwiml) &&
+  /<Hangup\/>/i.test(failoverTwiml) &&
+  !/<Redirect\b|<ConversationRelay\b|<Stream\b/i.test(failoverTwiml) &&
+  !/店舗に確認して折り返し|スタッフより折り返し/u.test(failoverTwiml);
 await new Promise((resolve) => setTimeout(resolve, 1500));
 const postSmokeHealthResponse = await fetch(`${baseUrl}/health?deep=1`, { signal: AbortSignal.timeout(30000) });
 const postSmokeHealth = await postSmokeHealthResponse.json();
@@ -117,11 +127,15 @@ if (postSmokeHealth?.realtimeAgent?.circuitBreakerOpen === true) {
   const circuitTwiml = await circuitResponse.text();
   circuitFallbackStatus = circuitResponse.status;
   circuitFallbackObserved = circuitResponse.ok &&
-    /<ConversationRelay\b/i.test(circuitTwiml) &&
-    !/<Stream\b/i.test(circuitTwiml);
+    /<Say\b/i.test(circuitTwiml) &&
+    /公式LINEからご連絡/u.test(circuitTwiml) &&
+    /<Hangup\/>/i.test(circuitTwiml) &&
+    !/<Redirect\b|<ConversationRelay\b|<Stream\b/i.test(circuitTwiml) &&
+    !/店舗に確認して折り返し|スタッフより折り返し/u.test(circuitTwiml);
 }
 const report = {
   webhookStatus: webhookResponse.status,
+  unsignedLegacyWebSocketRejected,
   healthArchitecture: health.realtimeAgent.architecture,
   conversationFlowVersion: health.realtimeAgent.conversationFlowVersion,
   firstVisitExplicitAnswerGateReady: health.realtimeAgent.firstVisitExplicitAnswerGateReady,
@@ -141,7 +155,9 @@ const report = {
   lastFailureAt: health.realtimeAgent.lastFailureAt,
   lastFailureCode: health.realtimeAgent.lastFailureCode,
   staleTruncateRecoveryReady: health.realtimeAgent.staleTruncateRecoveryReady,
-  automaticLegacyFailoverReady: health.realtimeAgent.automaticLegacyFailoverReady,
+  independentOutageFallbackReady: health.realtimeAgent.independentOutageFallbackReady,
+  outageFallbackDependsOnOpenAi: health.realtimeAgent.outageFallbackDependsOnOpenAi,
+  outageFallbackPromisesCallback: health.realtimeAgent.outageFallbackPromisesCallback,
   scriptedReplyPrimary: health.realtimeAgent.scriptedReplyPrimary,
   storeBound: Boolean(customParameters.storeId),
   websocketOpened: result.opened,
@@ -150,20 +166,48 @@ const report = {
   mediaMessages: result.mediaMessages,
   decodedAudioBytes: result.mediaBytes,
   playbackMarks: result.marks,
-  automaticFailoverRedirect,
+  automaticSafeOutageFallback,
   postSmokeFailureCode: postSmokeHealth?.realtimeAgent?.lastFailureCode ?? null,
   circuitBreakerOpen: postSmokeHealth?.realtimeAgent?.circuitBreakerOpen ?? false,
   circuitBreakerReason: postSmokeHealth?.realtimeAgent?.circuitBreakerReason ?? null,
   circuitFallbackStatus,
   circuitFallbackObserved,
-  operationalFallbackPass: automaticFailoverRedirect &&
+  operationalFallbackPass: automaticSafeOutageFallback &&
     (postSmokeHealth?.realtimeAgent?.circuitBreakerOpen !== true || circuitFallbackObserved),
-  pass: result.opened && result.mediaMessages > 0 && result.mediaBytes >= 160 && result.marks > 0 &&
-    automaticFailoverRedirect &&
+  pass: unsignedLegacyWebSocketRejected && result.opened && result.mediaMessages > 0 && result.mediaBytes >= 160 && result.marks > 0 &&
+    automaticSafeOutageFallback &&
     (postSmokeHealth?.realtimeAgent?.circuitBreakerOpen !== true || circuitFallbackObserved)
 };
 console.log(JSON.stringify(report, null, 2));
 if (!report.pass) process.exitCode = 1;
+
+function verifyUnsignedLegacyWebSocketRejected(websocketUrl) {
+  return new Promise((resolve) => {
+    const socket = new WebSocket(websocketUrl);
+    let settled = false;
+    const timeout = setTimeout(() => finish(false), 10000);
+
+    function finish(rejected) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      try {
+        socket.terminate();
+      } catch {
+        // Ignore cleanup errors after a rejected handshake.
+      }
+      resolve(rejected);
+    }
+
+    socket.on("open", () => finish(false));
+    socket.on("unexpected-response", (_request, response) => {
+      finish(response.statusCode === 401 || response.statusCode === 403);
+    });
+    socket.on("error", () => {
+      if (!settled) finish(false);
+    });
+  });
+}
 
 function runAgentSmoke({ websocketUrl, websocketSignature, forwardedProto, customParameters, callSid, streamSid }) {
   return new Promise((resolve) => {
