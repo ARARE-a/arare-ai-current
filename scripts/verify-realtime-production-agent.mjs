@@ -35,6 +35,7 @@ if (
   health?.realtimeAgent?.storeKnowledgeToolReady !== true ||
   health?.realtimeAgent?.freeTalkSideTopicReady !== true ||
   health?.realtimeAgent?.toolLoopGuardReady !== true ||
+  health?.realtimeAgent?.circuitBreakerReady !== true ||
   health?.realtimeAgent?.staleTruncateRecoveryReady !== true ||
   health?.realtimeAgent?.automaticLegacyFailoverReady !== true ||
   health?.realtimeAgent?.scriptedReplyPrimary !== false
@@ -91,6 +92,34 @@ const automaticFailoverRedirect = failoverResponse.ok &&
   /<Redirect\b/i.test(failoverTwiml) &&
   /\/api\/twilio\/voice\?fallbackFrom=realtime-agent/i.test(failoverTwiml) &&
   !/店舗に確認して折り返し/u.test(failoverTwiml);
+await new Promise((resolve) => setTimeout(resolve, 1500));
+const postSmokeHealthResponse = await fetch(`${baseUrl}/health?deep=1`, { signal: AbortSignal.timeout(30000) });
+const postSmokeHealth = await postSmokeHealthResponse.json();
+let circuitFallbackStatus = null;
+let circuitFallbackObserved = false;
+if (postSmokeHealth?.realtimeAgent?.circuitBreakerOpen === true) {
+  const circuitCallSid = `CA_REGRESSION_CIRCUIT_${Date.now()}`;
+  const circuitParams = {
+    ...webhookParams,
+    CallSid: circuitCallSid
+  };
+  const circuitSignature = twilio.getExpectedTwilioSignature(authToken, webhookUrl, circuitParams);
+  const circuitResponse = await fetch(webhookUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      "x-forwarded-proto": forwardedProto,
+      "x-twilio-signature": circuitSignature
+    },
+    body: new URLSearchParams(circuitParams),
+    signal: AbortSignal.timeout(30000)
+  });
+  const circuitTwiml = await circuitResponse.text();
+  circuitFallbackStatus = circuitResponse.status;
+  circuitFallbackObserved = circuitResponse.ok &&
+    /<ConversationRelay\b/i.test(circuitTwiml) &&
+    !/<Stream\b/i.test(circuitTwiml);
+}
 const report = {
   webhookStatus: webhookResponse.status,
   healthArchitecture: health.realtimeAgent.architecture,
@@ -108,6 +137,7 @@ const report = {
   storeKnowledgeToolReady: health.realtimeAgent.storeKnowledgeToolReady,
   freeTalkSideTopicReady: health.realtimeAgent.freeTalkSideTopicReady,
   toolLoopGuardReady: health.realtimeAgent.toolLoopGuardReady,
+  circuitBreakerReady: health.realtimeAgent.circuitBreakerReady,
   lastFailureAt: health.realtimeAgent.lastFailureAt,
   lastFailureCode: health.realtimeAgent.lastFailureCode,
   staleTruncateRecoveryReady: health.realtimeAgent.staleTruncateRecoveryReady,
@@ -121,7 +151,16 @@ const report = {
   decodedAudioBytes: result.mediaBytes,
   playbackMarks: result.marks,
   automaticFailoverRedirect,
-  pass: result.opened && result.mediaMessages > 0 && result.mediaBytes >= 160 && result.marks > 0 && automaticFailoverRedirect
+  postSmokeFailureCode: postSmokeHealth?.realtimeAgent?.lastFailureCode ?? null,
+  circuitBreakerOpen: postSmokeHealth?.realtimeAgent?.circuitBreakerOpen ?? false,
+  circuitBreakerReason: postSmokeHealth?.realtimeAgent?.circuitBreakerReason ?? null,
+  circuitFallbackStatus,
+  circuitFallbackObserved,
+  operationalFallbackPass: automaticFailoverRedirect &&
+    (postSmokeHealth?.realtimeAgent?.circuitBreakerOpen !== true || circuitFallbackObserved),
+  pass: result.opened && result.mediaMessages > 0 && result.mediaBytes >= 160 && result.marks > 0 &&
+    automaticFailoverRedirect &&
+    (postSmokeHealth?.realtimeAgent?.circuitBreakerOpen !== true || circuitFallbackObserved)
 };
 console.log(JSON.stringify(report, null, 2));
 if (!report.pass) process.exitCode = 1;

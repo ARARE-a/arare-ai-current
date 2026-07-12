@@ -51,6 +51,10 @@ const realtimeAgentResponseWatchdogMs = Math.max(
   6000,
   Number(process.env.OPENAI_REALTIME_AGENT_RESPONSE_WATCHDOG_MS ?? 12000)
 );
+const realtimeAgentQuotaCircuitMs = Math.max(
+  30000,
+  Number(process.env.OPENAI_REALTIME_AGENT_QUOTA_CIRCUIT_MS ?? 120000)
+);
 const demoAutoBusinessHourShiftsEnabled = process.env.DEMO_AUTO_BUSINESS_HOUR_SHIFTS_ENABLED !== "false";
 const demoAutoShiftStoreId = process.env.DEMO_STORE_ID ?? "demo-store-arare-ai";
 const demoAutoShiftDays = Math.max(7, Number(process.env.DEMO_AUTO_SHIFT_DAYS ?? 90));
@@ -121,6 +125,9 @@ let lastDemoShiftRefresh = null;
 let lastDemoShiftRefreshError = null;
 let lastRealtimeAgentFailureAt = null;
 let lastRealtimeAgentFailureCode = null;
+let lastRealtimeAgentSuccessAt = null;
+let realtimeAgentCircuitOpenUntil = 0;
+let realtimeAgentCircuitReason = null;
 
 function logRelay(event, data = {}) {
   const safeData = Object.fromEntries(
@@ -360,6 +367,15 @@ const server = http.createServer(async (request, response) => {
           toolLoopGuardReady: true,
           lastFailureAt: lastRealtimeAgentFailureAt,
           lastFailureCode: lastRealtimeAgentFailureCode,
+          lastSuccessAt: lastRealtimeAgentSuccessAt,
+          circuitBreakerReady: true,
+          circuitBreakerOpen: isRealtimeAgentCircuitOpen(),
+          circuitBreakerUntil: realtimeAgentCircuitOpenUntil > Date.now()
+            ? new Date(realtimeAgentCircuitOpenUntil).toISOString()
+            : null,
+          circuitBreakerReason: realtimeAgentCircuitOpenUntil > Date.now()
+            ? realtimeAgentCircuitReason
+            : null,
           staleTruncateRecoveryReady: true,
           automaticLegacyFailoverReady: true,
           duplicateToolCallGuardReady: true,
@@ -438,7 +454,15 @@ const server = http.createServer(async (request, response) => {
         logRelay("twilio_realtime_agent_voice_rejected", { reason: "invalid_twilio_signature" });
         return writeForbidden(response);
       }
-      await handleTwilioVoice(request, response, "openai_realtime_agent");
+      if (isRealtimeAgentCircuitOpen()) {
+        logRelay("twilio_realtime_agent_circuit_fallback", {
+          reason: realtimeAgentCircuitReason,
+          retryAt: new Date(realtimeAgentCircuitOpenUntil).toISOString()
+        });
+        await handleTwilioVoice(request, response, "conversation_relay");
+      } else {
+        await handleTwilioVoice(request, response, "openai_realtime_agent");
+      }
     } catch (error) {
       await handleVoiceWebhookFatalError(response, error, "twilio_realtime_agent_voice_webhook_failed");
     }
@@ -1009,12 +1033,18 @@ agentWss.on("connection", (twilioSocket) => {
           session.lastTokensPlayedAt = Date.now();
           if (terminal) sendTwilioEnd(twilioSocket, { reasonCode: "realtime-agent-completed" });
         },
+        onResponseComplete: ({ hadAudio }) => {
+          if (!hadAudio) return;
+          lastRealtimeAgentSuccessAt = new Date().toISOString();
+          closeRealtimeAgentCircuit();
+        },
         onError: async (error) => {
           if (session.mediaFailureHandled) return;
           session.mediaFailureHandled = true;
           session.requiredReview = true;
           lastRealtimeAgentFailureAt = new Date().toISOString();
           lastRealtimeAgentFailureCode = classifyRealtimeAgentFailure(error);
+          openRealtimeAgentCircuit(lastRealtimeAgentFailureCode);
           await upsertCallLog(session, "ESCALATED", `OpenAI Realtime agent: ${error.message}`);
           if (twilioSocket.readyState === WebSocket.OPEN) twilioSocket.close(1011, "realtime agent failed");
         }
@@ -8706,6 +8736,27 @@ function classifyRealtimeAgentFailure(error) {
   return "REALTIME_AGENT_FAILURE";
 }
 
+function openRealtimeAgentCircuit(reason) {
+  const duration = reason === "OPENAI_RATE_LIMIT"
+    ? 30000
+    : reason === "OPENAI_AUTHENTICATION_FAILED"
+      ? Math.max(realtimeAgentQuotaCircuitMs, 300000)
+      : realtimeAgentQuotaCircuitMs;
+  realtimeAgentCircuitReason = reason;
+  realtimeAgentCircuitOpenUntil = Date.now() + duration;
+}
+
+function closeRealtimeAgentCircuit() {
+  realtimeAgentCircuitOpenUntil = 0;
+  realtimeAgentCircuitReason = null;
+}
+
+function isRealtimeAgentCircuitOpen() {
+  if (realtimeAgentCircuitOpenUntil > Date.now()) return true;
+  if (realtimeAgentCircuitOpenUntil > 0) closeRealtimeAgentCircuit();
+  return false;
+}
+
 async function searchRealtimeAgentStoreKnowledge(session, args) {
   const query = String(args?.query ?? "").replace(/\s+/g, " ").trim();
   if (!query) {
@@ -9598,15 +9649,19 @@ export {
   buildRealtimeAgentInstructions,
   buildRealtimeAgentTools,
   buildRealtimeAgentAvailabilityKey,
+  classifyRealtimeAgentFailure,
+  closeRealtimeAgentCircuit,
   createPhoneSession,
   createRealtimeAgentState,
   createRealtimeAgentReservationHold,
   findRealtimeAgentNextAvailability,
   getRealtimeAgentReceptionState,
   markRealtimeAgentAssistantEvidence,
+  openRealtimeAgentCircuit,
   prepareRealtimeAgentFinalConfirmation,
   recordRealtimeAgentBookingDetails,
   searchRealtimeAgentStoreKnowledge,
+  isRealtimeAgentCircuitOpen,
   validateRealtimeAgentAvailabilityToken
 };
 

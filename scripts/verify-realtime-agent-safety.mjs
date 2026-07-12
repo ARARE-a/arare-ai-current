@@ -7,11 +7,15 @@ const {
   buildRealtimeAgentAvailabilityKey,
   buildRealtimeAgentInstructions,
   buildRealtimeAgentTools,
+  classifyRealtimeAgentFailure,
+  closeRealtimeAgentCircuit,
   createPhoneSession,
   createRealtimeAgentReservationHold,
   createRealtimeAgentState,
   getRealtimeAgentReceptionState,
+  isRealtimeAgentCircuitOpen,
   markRealtimeAgentAssistantEvidence,
+  openRealtimeAgentCircuit,
   prepareRealtimeAgentFinalConfirmation,
   recordRealtimeAgentBookingDetails,
   searchRealtimeAgentStoreKnowledge,
@@ -70,6 +74,14 @@ assert.match(instructions, /ツール出力は読み上げ原稿ではなく/);
 assert.match(instructions, /単なる相づちから推測しません/);
 assert.match(instructions, /commentaryフェーズは内部処理専用/);
 assert.doesNotMatch(instructions, /next_question|message_for_customer|spoken_summary|spoken_reply/);
+assert.equal(classifyRealtimeAgentFailure(new Error("insufficient_quota")), "OPENAI_INSUFFICIENT_QUOTA");
+assert.equal(classifyRealtimeAgentFailure(new Error("rate_limit_exceeded")), "OPENAI_RATE_LIMIT");
+closeRealtimeAgentCircuit();
+assert.equal(isRealtimeAgentCircuitOpen(), false);
+openRealtimeAgentCircuit("OPENAI_INSUFFICIENT_QUOTA");
+assert.equal(isRealtimeAgentCircuitOpen(), true);
+closeRealtimeAgentCircuit();
+assert.equal(isRealtimeAgentCircuitOpen(), false);
 
 let result = validateRealtimeAgentAvailabilityToken(session, "wrong-token");
 assert.equal(result.code, "INVALID_AVAILABILITY_TOKEN");
@@ -198,7 +210,7 @@ assert.equal(result.terminal, true);
 assert.equal(result.reservation_status, "tentative");
 assertNoScriptedSpeechFields(result);
 
-console.log(JSON.stringify({ ok: true, checks: 60 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 66 }, null, 2));
 
 function assertNoScriptedSpeechFields(value) {
   const forbidden = new Set(["next_question", "message_for_customer", "spoken_summary", "spoken_reply"]);
