@@ -119,6 +119,8 @@ const activeMediaSessions = new Map();
 const activeAgentSessions = new Map();
 let lastDemoShiftRefresh = null;
 let lastDemoShiftRefreshError = null;
+let lastRealtimeAgentFailureAt = null;
+let lastRealtimeAgentFailureCode = null;
 
 function logRelay(event, data = {}) {
   const safeData = Object.fromEntries(
@@ -356,6 +358,8 @@ const server = http.createServer(async (request, response) => {
           storeKnowledgeToolReady: true,
           freeTalkSideTopicReady: true,
           toolLoopGuardReady: true,
+          lastFailureAt: lastRealtimeAgentFailureAt,
+          lastFailureCode: lastRealtimeAgentFailureCode,
           staleTruncateRecoveryReady: true,
           automaticLegacyFailoverReady: true,
           duplicateToolCallGuardReady: true,
@@ -1009,6 +1013,8 @@ agentWss.on("connection", (twilioSocket) => {
           if (session.mediaFailureHandled) return;
           session.mediaFailureHandled = true;
           session.requiredReview = true;
+          lastRealtimeAgentFailureAt = new Date().toISOString();
+          lastRealtimeAgentFailureCode = classifyRealtimeAgentFailure(error);
           await upsertCallLog(session, "ESCALATED", `OpenAI Realtime agent: ${error.message}`);
           if (twilioSocket.readyState === WebSocket.OPEN) twilioSocket.close(1011, "realtime agent failed");
         }
@@ -8688,6 +8694,16 @@ function clearRealtimeAgentNoPromptWatchdog(session) {
   if (session.realtimeAgentTerminalPromptTimer) clearTimeout(session.realtimeAgentTerminalPromptTimer);
   session.realtimeAgentFirstPromptTimer = undefined;
   session.realtimeAgentTerminalPromptTimer = undefined;
+}
+
+function classifyRealtimeAgentFailure(error) {
+  const text = String(error instanceof Error ? error.message : error ?? "").toLowerCase();
+  if (text.includes("insufficient_quota") || text.includes("current quota")) return "OPENAI_INSUFFICIENT_QUOTA";
+  if (text.includes("rate_limit") || text.includes("rate limit")) return "OPENAI_RATE_LIMIT";
+  if (text.includes("authentication") || text.includes("api key") || text.includes("401")) return "OPENAI_AUTHENTICATION_FAILED";
+  if (text.includes("connection closed")) return "OPENAI_CONNECTION_CLOSED";
+  if (text.includes("timeout")) return "OPENAI_TIMEOUT";
+  return "REALTIME_AGENT_FAILURE";
 }
 
 async function searchRealtimeAgentStoreKnowledge(session, args) {

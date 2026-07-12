@@ -108,6 +108,8 @@ const report = {
   storeKnowledgeToolReady: health.realtimeAgent.storeKnowledgeToolReady,
   freeTalkSideTopicReady: health.realtimeAgent.freeTalkSideTopicReady,
   toolLoopGuardReady: health.realtimeAgent.toolLoopGuardReady,
+  lastFailureAt: health.realtimeAgent.lastFailureAt,
+  lastFailureCode: health.realtimeAgent.lastFailureCode,
   staleTruncateRecoveryReady: health.realtimeAgent.staleTruncateRecoveryReady,
   automaticLegacyFailoverReady: health.realtimeAgent.automaticLegacyFailoverReady,
   scriptedReplyPrimary: health.realtimeAgent.scriptedReplyPrimary,
