@@ -65,8 +65,21 @@ const bridge = new OpenAiRealtimeAgentBridge({
   onToolCall: async (call) => {
     toolCalls.push(call);
     return call.arguments.terminal
-      ? { ok: true, code: "HOLD_CREATED", terminal: true, spoken_reply: "仮予約を承りました。" }
-      : { ok: true, code: "AVAILABLE", next_question: "お名前をお願いします。" };
+      ? {
+          ok: true,
+          code: "HOLD_CREATED_SMS_SENT",
+          terminal: true,
+          reservation_status: "tentative",
+          sms_status: "sent",
+          required_disclosures: ["reservation_is_tentative", "sms_was_sent"]
+        }
+      : {
+          ok: true,
+          code: "AVAILABLE",
+          slot: { starts_at: "2026-07-12T21:00:00+09:00", course_duration_min: 90 },
+          missing_fields: ["customer_name", "phone"],
+          allowed_actions: ["record_booking_details", "continue_conversation"]
+        };
   },
   onUsage: (source, usage) => usageEvents.push({ source, usage }),
   onPlaybackComplete: (event) => playbackEvents.push(event),
@@ -123,9 +136,9 @@ assert.equal(twilio.sent.length, twilioMessagesBeforeCommentary, "commentary aud
 assert.deepEqual(assistantTranscripts, [], "suppressed commentary must not enter the call transcript");
 assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_commentary_audio_suppressed"));
 
-bridge.startGreeting("お電話ありがとうございます。ご希望をどうぞ。");
+bridge.startGreeting();
 assert.equal(openai.sent.at(-1).type, "response.create");
-assert.match(openai.sent.at(-1).response.instructions, /お電話ありがとうございます/);
+assert.match(openai.sent.at(-1).response.instructions, /定型文を読む必要はありません/);
 assert.equal(openai.sent.at(-1).response.tool_choice, "none");
 
 openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_greeting" } }));
@@ -184,9 +197,8 @@ const toolOutput = openai.sent.find((item) => item.type === "conversation.item.c
 assert.ok(toolOutput);
 assert.equal(JSON.parse(toolOutput.item.output).code, "AVAILABLE");
 assert.equal(openai.sent.at(-1).type, "response.create");
-assert.match(openai.sent.at(-1).response.instructions, /お名前をお願いします/);
-assert.match(openai.sent.at(-1).response.instructions, /前置きや補足を加えず/);
-assert.equal(openai.sent.at(-1).response.tool_choice, "none");
+assert.equal(openai.sent.at(-1).response.instructions, undefined, "tool facts must not force a customer utterance");
+assert.equal(openai.sent.at(-1).response.tool_choice, undefined, "the model must remain free to answer or call another tool");
 
 const responseCreateCount = openai.sent.filter((item) => item.type === "response.create").length;
 openai.emit("message", JSON.stringify(toolResponse));
@@ -225,12 +237,22 @@ openai.emit("message", JSON.stringify({
       name: "check_availability",
       call_id: "call_terminal_1",
       arguments: JSON.stringify({ terminal: true })
+    }, {
+      type: "function_call",
+      name: "check_availability",
+      call_id: "call_after_terminal_must_skip",
+      arguments: JSON.stringify({ starts_at: "2026-07-12T22:00:00+09:00" })
     }]
   }
 }));
 await tick();
-assert.match(openai.sent.at(-1).response.instructions, /仮予約を承りました/);
-assert.equal(openai.sent.at(-1).response.tool_choice, "none");
+assert.equal(toolCalls.some((call) => call.callId === "call_after_terminal_must_skip"), false);
+const skippedAfterTerminal = openai.sent.find((item) =>
+  item.type === "conversation.item.create" && item.item.call_id === "call_after_terminal_must_skip"
+);
+assert.equal(JSON.parse(skippedAfterTerminal.item.output).code, "SKIPPED_AFTER_TERMINAL_RESULT");
+assert.equal(openai.sent.at(-1).response.instructions, undefined);
+assert.equal(openai.sent.at(-1).response.tool_choice, "none", "terminal result may not trigger another side effect tool");
 openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_terminal_audio" } }));
 openai.emit("message", JSON.stringify({
   type: "response.output_item.added",
@@ -248,8 +270,30 @@ await bridge.handleTwilioMessage(terminalMark);
 assert.equal(playbackEvents.at(-1).terminal, true);
 assert.deepEqual(usageEvents.map((item) => item.source), ["realtime_agent", "transcription", "realtime_agent"]);
 
+bridge.maxConsecutiveToolTurns = 1;
+for (let index = 1; index <= 2; index += 1) {
+  openai.emit("message", JSON.stringify({ type: "response.created", response: { id: `resp_loop_${index}` } }));
+  openai.emit("message", JSON.stringify({
+    type: "response.done",
+    response: {
+      id: `resp_loop_${index}`,
+      status: "completed",
+      output: [{
+        type: "function_call",
+        name: "check_availability",
+        call_id: `call_loop_${index}`,
+        arguments: JSON.stringify({ starts_at: "2026-07-12T21:00:00+09:00" })
+      }]
+    }
+  }));
+  await tick();
+}
+assert.match(openai.sent.at(-1).response.instructions, /これ以上ツールを呼ばず/);
+assert.equal(openai.sent.at(-1).response.tool_choice, "none");
+assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_tool_loop_guard"));
+
 bridge.close();
-console.log(JSON.stringify({ ok: true, checks: 33 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 40 }, null, 2));
 
 function tick() {
   return new Promise((resolve) => setImmediate(resolve));

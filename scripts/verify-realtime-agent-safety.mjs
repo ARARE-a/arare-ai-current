@@ -14,19 +14,30 @@ const {
   markRealtimeAgentAssistantEvidence,
   prepareRealtimeAgentFinalConfirmation,
   recordRealtimeAgentBookingDetails,
+  searchRealtimeAgentStoreKnowledge,
   validateRealtimeAgentAvailabilityToken
 } = await import("./voice-relay-server.mjs");
 
 const session = createPhoneSession();
 session.callSid = "CA_SAFETY_TEST";
 session.from = "+818037884404";
+session.storeId = "store-test";
 session.storeContext = {
   storeId: "store-test",
-  store: { name: "テスト店", openTime: "12:00", closeTime: "29:00" },
+  store: {
+    name: "テスト店",
+    openTime: "12:00",
+    closeTime: "29:00",
+    setting: { attentionNotes: "来店前に店舗ルールをご確認ください。", ngWords: ["禁止行為"] },
+    aiSetting: { tone: "落ち着いた自然な受付", forbiddenAnswers: [], escalationKeywords: ["返金"] }
+  },
   courses: [{ id: "course-90", name: "90分スタンダードコース", durationMin: 90, price: 17000 }],
   options: [],
   therapists: [{ id: "therapist-1", displayName: "みさき" }],
-  rooms: [{ id: "room-1", name: "Room A" }]
+  rooms: [{ id: "room-1", name: "Room A" }],
+  knowledge: [{ id: "kb-1", title: "支払い方法", category: "店舗", content: "支払いは現金のみです。", source: "店舗確認" }],
+  faqs: [{ id: "faq-1", question: "キャンセルはできますか", answer: "店舗への連絡が必要です。" }],
+  talkScripts: [{ id: "talk-1", title: "道案内", situation: "アクセス", content: "最寄り駅から店舗へ案内します。" }]
 };
 session.realtimeAgentState = createRealtimeAgentState();
 session.reservationDraft.startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -43,63 +54,73 @@ session.realtimeAgentState.availabilityKey = buildRealtimeAgentAvailabilityKey(s
 const tools = buildRealtimeAgentTools();
 assert.deepEqual(tools.map((tool) => tool.name), [
   "get_reception_state",
+  "search_store_knowledge",
   "check_availability",
   "find_next_availability",
   "record_booking_details",
   "prepare_final_confirmation",
   "create_reservation_hold"
 ]);
-assert.match(buildRealtimeAgentInstructions(session), /生音声を直接理解/);
-assert.match(buildRealtimeAgentInstructions(session), /既に聞いた情報を再質問しません/);
-assert.match(buildRealtimeAgentInstructions(session), /利用者の返答を受ける前/);
-assert.match(buildRealtimeAgentInstructions(session), /『はい』『ありがとう』『すごい』から推測しません/);
-assert.match(buildRealtimeAgentInstructions(session), /commentaryフェーズでは利用者向け音声を一切出さず/);
-assert.match(buildRealtimeAgentInstructions(session), /条件を整えます/);
-assert.equal(validateRealtimeAgentAvailabilityToken(session, "wrong-token").code, "INVALID_AVAILABILITY_TOKEN");
+const instructions = buildRealtimeAgentInstructions(session);
+assert.match(instructions, /生音声を直接理解/);
+assert.match(instructions, /固定台本はありません/);
+assert.match(instructions, /言い回し、質問の順番/);
+assert.match(instructions, /予約途中の質問、訂正、割り込み、雑談/);
+assert.match(instructions, /ツール出力は読み上げ原稿ではなく/);
+assert.match(instructions, /単なる相づちから推測しません/);
+assert.match(instructions, /commentaryフェーズは内部処理専用/);
+assert.doesNotMatch(instructions, /next_question|message_for_customer|spoken_summary|spoken_reply/);
+
+let result = validateRealtimeAgentAvailabilityToken(session, "wrong-token");
+assert.equal(result.code, "INVALID_AVAILABILITY_TOKEN");
+assertNoScriptedSpeechFields(result);
 assert.equal(validateRealtimeAgentAvailabilityToken(session, "availability-token"), null);
 
-let result = recordRealtimeAgentBookingDetails(session, {
+result = recordRealtimeAgentBookingDetails(session, {
   availability_token: "availability-token",
   use_caller_number: true,
   caller_number_confirmed: true
 });
 assert.equal(result.code, "CALLER_PHONE_CONFIRMATION_REQUIRED");
 assert.equal(session.reservationDraft.phone, undefined);
+assertNoScriptedSpeechFields(result);
 
-markRealtimeAgentAssistantEvidence(session, "SMSは今のお電話番号、下4桁4404でよろしいですか？");
+markRealtimeAgentAssistantEvidence(session, "SMSの送信先は、今のお電話番号の下4桁4404でよろしいでしょうか？");
 session.realtimeAgentState.userSpeechSequence = 1;
 session.realtimeAgentState.lastUserTranscript = "はい、その番号でお願いします";
 session.realtimeAgentState.lastUserTranscriptSpeechSequence = 1;
 result = recordRealtimeAgentBookingDetails(session, {
   availability_token: "availability-token",
-  customer_name: "佐藤",
   use_caller_number: true,
   caller_number_confirmed: true
 });
 assert.equal(result.ok, true);
-assert.equal(session.reservationDraft.customerName, "佐藤");
 assert.equal(session.reservationDraft.phone, "080-3788-4404");
-assert.equal(session.reservationDraft.firstVisit, undefined);
-assert.equal(result.next_required_field, "first_visit");
+assert.equal(result.collection_state.customer_name_collected, false);
+assertNoScriptedSpeechFields(result);
 
+session.realtimeAgentState.userSpeechSequence = 2;
+session.realtimeAgentState.lastUserTranscript = "名前は佐藤です";
+session.realtimeAgentState.lastUserTranscriptSpeechSequence = 2;
 result = recordRealtimeAgentBookingDetails(session, {
   availability_token: "availability-token",
-  first_visit: true
+  customer_name: "佐藤"
 });
-assert.equal(result.code, "FIRST_VISIT_CONFIRMATION_REQUIRED");
-assert.equal(session.reservationDraft.firstVisit, undefined);
+assert.equal(result.ok, true);
+assert.equal(session.reservationDraft.customerName, "佐藤");
+assertNoScriptedSpeechFields(result);
 
-markRealtimeAgentAssistantEvidence(session, "当店は初めてですか、以前にもご利用がありますか？");
-session.realtimeAgentState.userSpeechSequence = 2;
+session.realtimeAgentState.userSpeechSequence = 3;
 session.realtimeAgentState.lastUserTranscript = "以前も利用しました";
-session.realtimeAgentState.lastUserTranscriptSpeechSequence = 2;
+session.realtimeAgentState.lastUserTranscriptSpeechSequence = 3;
 result = recordRealtimeAgentBookingDetails(session, {
   availability_token: "availability-token",
   first_visit: false
 });
 assert.equal(result.ok, true);
 assert.equal(session.reservationDraft.firstVisit, false);
-assert.equal(result.next_required_field, "attention");
+assert.equal(result.collection_state.attention_confirmed, false);
+assertNoScriptedSpeechFields(result);
 
 result = recordRealtimeAgentBookingDetails(session, {
   availability_token: "availability-token",
@@ -107,28 +128,55 @@ result = recordRealtimeAgentBookingDetails(session, {
 });
 assert.equal(result.code, "ATTENTION_CONFIRMATION_REQUIRED");
 assert.notEqual(session.reservationDraft.attentionConfirmed, true);
+assertNoScriptedSpeechFields(result);
 
-markRealtimeAgentAssistantEvidence(session, "注意事項と店舗ルールはご確認済みですか？");
-session.realtimeAgentState.userSpeechSequence = 3;
-session.realtimeAgentState.lastUserTranscript = "確認しました";
-session.realtimeAgentState.lastUserTranscriptSpeechSequence = 3;
+session.realtimeAgentState.userSpeechSequence = 4;
+session.realtimeAgentState.lastUserTranscript = "注意事項と店舗ルールは確認済みです";
+session.realtimeAgentState.lastUserTranscriptSpeechSequence = 4;
 result = recordRealtimeAgentBookingDetails(session, {
   availability_token: "availability-token",
   attention_confirmed: true
 });
 assert.equal(result.code, "DETAILS_COMPLETE");
 assert.equal(session.reservationDraft.attentionConfirmed, true);
-assert.equal(result.next_question, undefined);
-assert.equal(result.continue_with, "prepare_final_confirmation");
+assert.equal(result.collection_state.ready_for_final_confirmation, true);
+assert.equal(result.ready_for_final_confirmation, true);
+assert.ok(result.allowed_actions.includes("prepare_final_confirmation"));
+assertNoScriptedSpeechFields(result);
+
+const confirmationParts = Object.fromEntries(new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  hour: "numeric",
+  minute: "numeric",
+  hour12: false
+}).formatToParts(session.reservationDraft.startsAt).map((part) => [part.type, part.value]));
+session.realtimeAgentState.expectedConfirmationText = "internal-evidence-only";
+markRealtimeAgentAssistantEvidence(
+  session,
+  `明日の${Number(confirmationParts.hour)}時${Number(confirmationParts.minute) ? `${Number(confirmationParts.minute)}分` : ""}、90分コース、担当はみさき、佐藤様、電話番号の下4桁4404、再来で、店舗確認前の仮予約です。この内容でお間違いないですか？`
+);
+assert.equal(session.realtimeAgentState.confirmationSpoken, true);
 
 const state = getRealtimeAgentReceptionState(session);
-assert.equal(state.state.next_required_field, null);
+assert.equal(state.collection_state.ready_for_final_confirmation, true);
 assert.equal(state.state.phone_collected, true);
+assert.equal(state.state.phone_last4, "4404");
+assertNoScriptedSpeechFields(state);
+
+let knowledge = await searchRealtimeAgentStoreKnowledge(session, { query: "支払い方法" });
+assert.equal(knowledge.code, "KNOWLEDGE_FOUND");
+assert.equal(knowledge.matches[0].content, "支払いは現金のみです。");
+assertNoScriptedSpeechFields(knowledge);
+knowledge = await searchRealtimeAgentStoreKnowledge(session, { query: "宇宙船燃料" });
+assert.equal(knowledge.code, "KNOWLEDGE_NOT_FOUND");
+assertNoScriptedSpeechFields(knowledge);
 
 result = await prepareRealtimeAgentFinalConfirmation(session, { availability_token: "wrong-token" });
 assert.equal(result.code, "INVALID_AVAILABILITY_TOKEN");
+assertNoScriptedSpeechFields(result);
 
 session.realtimeAgentState.confirmationToken = "confirmation-token";
+session.realtimeAgentState.confirmationSpoken = false;
 result = await createRealtimeAgentReservationHold(session, {
   confirmation_token: "confirmation-token",
   customer_confirmed: true,
@@ -136,6 +184,7 @@ result = await createRealtimeAgentReservationHold(session, {
 });
 assert.equal(result.code, "CONFIRMATION_NOT_VERIFIED");
 assert.equal(session.reservationId, undefined);
+assertNoScriptedSpeechFields(result);
 
 session.reservationId = "existing-reservation";
 session.reservationDraft.completed = true;
@@ -146,5 +195,19 @@ result = await createRealtimeAgentReservationHold(session, {
 });
 assert.equal(result.code, "ALREADY_CREATED");
 assert.equal(result.terminal, true);
+assert.equal(result.reservation_status, "tentative");
+assertNoScriptedSpeechFields(result);
 
-console.log(JSON.stringify({ ok: true, checks: 39 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 60 }, null, 2));
+
+function assertNoScriptedSpeechFields(value) {
+  const forbidden = new Set(["next_question", "message_for_customer", "spoken_summary", "spoken_reply"]);
+  visit(value);
+  function visit(current) {
+    if (!current || typeof current !== "object") return;
+    for (const [key, child] of Object.entries(current)) {
+      assert.equal(forbidden.has(key), false, `structured tool output must not contain ${key}`);
+      visit(child);
+    }
+  }
+}

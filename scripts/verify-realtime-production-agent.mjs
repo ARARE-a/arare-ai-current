@@ -7,6 +7,7 @@ loadEnv(".env.local");
 
 const args = parseArgs(process.argv.slice(2));
 const baseUrl = String(args.base ?? "https://arare-ai-voice-relay.onrender.com").replace(/\/+$/, "");
+const forwardedProto = new URL(baseUrl).protocol.replace(":", "");
 const webhookUrl = `${baseUrl}/api/twilio/voice/realtime-agent`;
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -20,14 +21,20 @@ if (
   !health?.ok ||
   !health?.databaseHealth?.ok ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 4 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 5 ||
   health?.realtimeAgent?.firstVisitExplicitAnswerGateReady !== true ||
-  health?.realtimeAgent?.forcedToolQuestionReady !== true ||
+  health?.realtimeAgent?.forcedToolQuestionReady !== false ||
   health?.realtimeAgent?.ambiguousConfirmationGuardReady !== true ||
   health?.realtimeAgent?.nextAvailabilityToolReady !== true ||
   health?.realtimeAgent?.commentaryAudioSuppressionReady !== true ||
-  health?.realtimeAgent?.forcedSpeechToolLockReady !== true ||
+  health?.realtimeAgent?.forcedSpeechToolLockReady !== false ||
   health?.realtimeAgent?.naturalReceptionPromptReady !== true ||
+  health?.realtimeAgent?.autonomousConversationReady !== true ||
+  health?.realtimeAgent?.structuredToolFactsReady !== true ||
+  health?.realtimeAgent?.fixedToolUtterancesDisabled !== true ||
+  health?.realtimeAgent?.storeKnowledgeToolReady !== true ||
+  health?.realtimeAgent?.freeTalkSideTopicReady !== true ||
+  health?.realtimeAgent?.toolLoopGuardReady !== true ||
   health?.realtimeAgent?.staleTruncateRecoveryReady !== true ||
   health?.realtimeAgent?.automaticLegacyFailoverReady !== true ||
   health?.realtimeAgent?.scriptedReplyPrimary !== false
@@ -50,6 +57,7 @@ const webhookResponse = await fetch(webhookUrl, {
   method: "POST",
   headers: {
     "content-type": "application/x-www-form-urlencoded",
+    "x-forwarded-proto": forwardedProto,
     "x-twilio-signature": webhookSignature
   },
   body: new URLSearchParams(webhookParams),
@@ -58,14 +66,15 @@ const webhookResponse = await fetch(webhookUrl, {
 const twiml = await webhookResponse.text();
 if (!webhookResponse.ok) throw new Error(`Realtime agent webhook returned HTTP ${webhookResponse.status}`);
 
-const websocketUrl = extractStreamUrl(twiml);
+let websocketUrl = extractStreamUrl(twiml);
+if (forwardedProto === "http") websocketUrl = websocketUrl.replace(/^wss:/, "ws:");
 const customParameters = extractParameters(twiml);
 if (!websocketUrl || !customParameters.storeId || customParameters.agentMode !== "native-speech-to-speech") {
   throw new Error("Realtime agent webhook did not return a store-bound direct Media Stream");
 }
 
 const websocketSignature = twilio.getExpectedTwilioSignature(authToken, websocketUrl, {});
-const result = await runAgentSmoke({ websocketUrl, websocketSignature, customParameters, callSid, streamSid });
+const result = await runAgentSmoke({ websocketUrl, websocketSignature, forwardedProto, customParameters, callSid, streamSid });
 const failoverCallSid = `CA_REGRESSION_FAILOVER_${Date.now()}`;
 const failoverResponse = await fetch(`${baseUrl}/api/twilio/voice/connect-status?source=realtime-agent`, {
   method: "POST",
@@ -93,12 +102,19 @@ const report = {
   commentaryAudioSuppressionReady: health.realtimeAgent.commentaryAudioSuppressionReady,
   forcedSpeechToolLockReady: health.realtimeAgent.forcedSpeechToolLockReady,
   naturalReceptionPromptReady: health.realtimeAgent.naturalReceptionPromptReady,
+  autonomousConversationReady: health.realtimeAgent.autonomousConversationReady,
+  structuredToolFactsReady: health.realtimeAgent.structuredToolFactsReady,
+  fixedToolUtterancesDisabled: health.realtimeAgent.fixedToolUtterancesDisabled,
+  storeKnowledgeToolReady: health.realtimeAgent.storeKnowledgeToolReady,
+  freeTalkSideTopicReady: health.realtimeAgent.freeTalkSideTopicReady,
+  toolLoopGuardReady: health.realtimeAgent.toolLoopGuardReady,
   staleTruncateRecoveryReady: health.realtimeAgent.staleTruncateRecoveryReady,
   automaticLegacyFailoverReady: health.realtimeAgent.automaticLegacyFailoverReady,
   scriptedReplyPrimary: health.realtimeAgent.scriptedReplyPrimary,
   storeBound: Boolean(customParameters.storeId),
   websocketOpened: result.opened,
   closeCode: result.code,
+  websocketError: result.error,
   mediaMessages: result.mediaMessages,
   decodedAudioBytes: result.mediaBytes,
   playbackMarks: result.marks,
@@ -108,9 +124,14 @@ const report = {
 console.log(JSON.stringify(report, null, 2));
 if (!report.pass) process.exitCode = 1;
 
-function runAgentSmoke({ websocketUrl, websocketSignature, customParameters, callSid, streamSid }) {
+function runAgentSmoke({ websocketUrl, websocketSignature, forwardedProto, customParameters, callSid, streamSid }) {
   return new Promise((resolve) => {
-    const socket = new WebSocket(websocketUrl, { headers: { "x-twilio-signature": websocketSignature } });
+    const socket = new WebSocket(websocketUrl, {
+      headers: {
+        "x-forwarded-proto": forwardedProto,
+        "x-twilio-signature": websocketSignature
+      }
+    });
     const state = { opened: false, code: null, reason: null, error: null, mediaMessages: 0, mediaBytes: 0, marks: 0 };
     const timeout = setTimeout(() => {
       state.error = "production Realtime agent smoke timeout";

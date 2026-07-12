@@ -26,6 +26,7 @@ export class OpenAiRealtimeAgentBridge {
     this.onResponseComplete = options.onResponseComplete ?? (() => {});
     this.onError = options.onError ?? (async () => {});
     this.responseWatchdogMs = Math.max(6000, Number(options.responseWatchdogMs ?? 12000));
+    this.maxConsecutiveToolTurns = Math.max(2, Number(options.maxConsecutiveToolTurns ?? 8));
 
     this.streamSid = undefined;
     this.callSid = undefined;
@@ -50,6 +51,7 @@ export class OpenAiRealtimeAgentBridge {
     this.processedToolCallIds = new Set();
     this.processedResponseIds = new Set();
     this.terminalPending = false;
+    this.consecutiveToolTurns = 0;
   }
 
   async connect() {
@@ -152,11 +154,9 @@ export class OpenAiRealtimeAgentBridge {
     if (message.event === "stop") this.close();
   }
 
-  startGreeting(text) {
-    const greeting = String(text ?? "").trim();
-    if (!greeting) return;
+  startGreeting() {
     this.requestResponse(
-      `最初の挨拶として、次の一文だけを自然に話してください。内容を追加しないでください。\n${greeting}`,
+      "電話受付として短く自然に挨拶し、相手の要件を自由に伺ってください。定型文を読む必要はありません。",
       { toolChoice: "none" }
     );
   }
@@ -299,6 +299,7 @@ export class OpenAiRealtimeAgentBridge {
       this.firstOutputAudioAt = 0;
     }
     this.responseHadAudio = true;
+    this.consecutiveToolTurns = 0;
     if (!this.firstOutputAudioAt) this.firstOutputAudioAt = Date.now();
     this.currentOutputBytes += Buffer.from(delta, "base64").length;
     this.clearResponseWatchdog();
@@ -343,7 +344,7 @@ export class OpenAiRealtimeAgentBridge {
 
   async executeToolCalls(toolCalls) {
     let executed = 0;
-    let forcedSpeechInstruction = "";
+    let terminalResultSeen = false;
     for (const item of toolCalls) {
       const callId = String(item.call_id ?? "");
       if (!callId || this.processedToolCallIds.has(callId)) continue;
@@ -357,27 +358,33 @@ export class OpenAiRealtimeAgentBridge {
       }
 
       let result;
-      try {
-        result = await this.onToolCall({ name: item.name, arguments: args, callId });
-      } catch (error) {
+      if (terminalResultSeen) {
         result = {
           ok: false,
-          code: "TOOL_EXECUTION_FAILED",
-          message: error instanceof Error ? error.message : String(error)
+          code: "SKIPPED_AFTER_TERMINAL_RESULT",
+          error: { reason: "call_already_completed" },
+          allowed_actions: ["close_call"]
         };
+      } else {
+        try {
+          result = await this.onToolCall({ name: item.name, arguments: args, callId });
+        } catch (error) {
+          this.log("openai_realtime_agent_tool_callback_failed", {
+            name: item.name,
+            callId,
+            reason: error instanceof Error ? error.message : String(error)
+          });
+          result = {
+            ok: false,
+            code: "TOOL_EXECUTION_FAILED",
+            error: { reason: "tool_execution_failed" },
+            allowed_actions: ["explain_unavailable", "continue_without_action"]
+          };
+        }
       }
-      if (result?.terminal === true) this.terminalPending = true;
-      if (result?.message_for_customer) {
-        forcedSpeechInstruction = `次の案内だけを、前置きや補足を加えず自然に話してください。\n${result.message_for_customer}`;
-      }
-      if (result?.next_question) {
-        forcedSpeechInstruction = `次の質問だけを、前置きや補足を加えず自然に話してください。話した後は利用者の返答を待ってください。\n${result.next_question}`;
-      }
-      if (result?.spoken_summary) {
-        forcedSpeechInstruction = `次の最終復唱だけを、内容を省略・追加・変更せず自然に読み上げてください。読み上げ後は利用者の返答を待ってください。\n${result.spoken_summary}`;
-      }
-      if (result?.spoken_reply) {
-        forcedSpeechInstruction = `次の完了案内だけを、内容を省略・追加・変更せず自然に読み上げてください。\n${result.spoken_reply}`;
+      if (result?.terminal === true) {
+        this.terminalPending = true;
+        terminalResultSeen = true;
       }
       this.log("openai_realtime_agent_tool_completed", {
         name: item.name,
@@ -396,10 +403,24 @@ export class OpenAiRealtimeAgentBridge {
       }));
     }
     if (executed > 0 && this.openai?.readyState === OPEN) {
-      this.requestResponse(
-        forcedSpeechInstruction || undefined,
-        forcedSpeechInstruction ? { toolChoice: "none" } : undefined
-      );
+      if (terminalResultSeen) {
+        this.consecutiveToolTurns = 0;
+        this.requestResponse(undefined, { toolChoice: "none" });
+        return;
+      }
+      this.consecutiveToolTurns += 1;
+      if (this.consecutiveToolTurns > this.maxConsecutiveToolTurns) {
+        this.log("openai_realtime_agent_tool_loop_guard", {
+          consecutiveToolTurns: this.consecutiveToolTurns,
+          maxConsecutiveToolTurns: this.maxConsecutiveToolTurns
+        });
+        this.requestResponse(
+          "これ以上ツールを呼ばず、取得済みの事実だけを使って利用者へ自然に応答してください。必要な事実が足りなければ、分からない点を一つ確認してください。",
+          { toolChoice: "none" }
+        );
+        return;
+      }
+      this.requestResponse();
     }
   }
 
