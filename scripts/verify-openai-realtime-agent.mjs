@@ -33,6 +33,7 @@ const toolCalls = [];
 const playbackEvents = [];
 const usageEvents = [];
 const bridgeErrors = [];
+const bridgeLogs = [];
 const tools = [
   {
     type: "function",
@@ -54,6 +55,7 @@ const bridge = new OpenAiRealtimeAgentBridge({
   transcriptionModel: "gpt-4o-transcribe",
   instructions: "日本語で自然に応答してください。",
   tools,
+  log: (event, detail) => bridgeLogs.push({ event, detail }),
   openAiSocketFactory: () => {
     queueMicrotask(() => openai.open());
     return openai;
@@ -88,14 +90,48 @@ await bridge.handleTwilioMessage({
 await bridge.handleTwilioMessage({ event: "media", media: { payload: "CALLER_PCMU" } });
 assert.deepEqual(openai.sent.at(-1), { type: "input_audio_buffer.append", audio: "CALLER_PCMU" });
 
+const twilioMessagesBeforeCommentary = twilio.sent.length;
+openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_commentary" } }));
+openai.emit("message", JSON.stringify({
+  type: "response.output_item.added",
+  item: { id: "item_commentary", type: "message", phase: "commentary" }
+}));
+openai.emit("message", JSON.stringify({
+  type: "response.output_audio_transcript.done",
+  item_id: "item_commentary",
+  transcript: "では、確認してから進めます。"
+}));
+openai.emit("message", JSON.stringify({
+  type: "response.output_audio.delta",
+  delta: Buffer.alloc(160).toString("base64")
+}));
+openai.emit("message", JSON.stringify({
+  type: "response.done",
+  response: {
+    id: "resp_commentary",
+    status: "completed",
+    output: [{
+      id: "item_commentary",
+      type: "message",
+      phase: "commentary",
+      content: [{ type: "output_audio", transcript: "では、確認してから進めます。" }]
+    }]
+  }
+}));
+await tick();
+assert.equal(twilio.sent.length, twilioMessagesBeforeCommentary, "commentary audio must not reach the caller");
+assert.deepEqual(assistantTranscripts, [], "suppressed commentary must not enter the call transcript");
+assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_commentary_audio_suppressed"));
+
 bridge.startGreeting("お電話ありがとうございます。ご希望をどうぞ。");
 assert.equal(openai.sent.at(-1).type, "response.create");
 assert.match(openai.sent.at(-1).response.instructions, /お電話ありがとうございます/);
+assert.equal(openai.sent.at(-1).response.tool_choice, "none");
 
 openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_greeting" } }));
 openai.emit("message", JSON.stringify({
   type: "response.output_item.added",
-  item: { id: "item_greeting", type: "message" }
+  item: { id: "item_greeting", type: "message", phase: "final_answer" }
 }));
 openai.emit("message", JSON.stringify({
   type: "response.output_audio_transcript.done",
@@ -150,6 +186,7 @@ assert.equal(JSON.parse(toolOutput.item.output).code, "AVAILABLE");
 assert.equal(openai.sent.at(-1).type, "response.create");
 assert.match(openai.sent.at(-1).response.instructions, /お名前をお願いします/);
 assert.match(openai.sent.at(-1).response.instructions, /前置きや補足を加えず/);
+assert.equal(openai.sent.at(-1).response.tool_choice, "none");
 
 const responseCreateCount = openai.sent.filter((item) => item.type === "response.create").length;
 openai.emit("message", JSON.stringify(toolResponse));
@@ -193,6 +230,7 @@ openai.emit("message", JSON.stringify({
 }));
 await tick();
 assert.match(openai.sent.at(-1).response.instructions, /仮予約を承りました/);
+assert.equal(openai.sent.at(-1).response.tool_choice, "none");
 openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_terminal_audio" } }));
 openai.emit("message", JSON.stringify({
   type: "response.output_item.added",
@@ -211,7 +249,7 @@ assert.equal(playbackEvents.at(-1).terminal, true);
 assert.deepEqual(usageEvents.map((item) => item.source), ["realtime_agent", "transcription", "realtime_agent"]);
 
 bridge.close();
-console.log(JSON.stringify({ ok: true, checks: 26 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 33 }, null, 2));
 
 function tick() {
   return new Promise((resolve) => setImmediate(resolve));

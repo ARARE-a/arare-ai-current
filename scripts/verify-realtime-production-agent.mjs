@@ -20,11 +20,14 @@ if (
   !health?.ok ||
   !health?.databaseHealth?.ok ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 3 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 4 ||
   health?.realtimeAgent?.firstVisitExplicitAnswerGateReady !== true ||
   health?.realtimeAgent?.forcedToolQuestionReady !== true ||
   health?.realtimeAgent?.ambiguousConfirmationGuardReady !== true ||
   health?.realtimeAgent?.nextAvailabilityToolReady !== true ||
+  health?.realtimeAgent?.commentaryAudioSuppressionReady !== true ||
+  health?.realtimeAgent?.forcedSpeechToolLockReady !== true ||
+  health?.realtimeAgent?.naturalReceptionPromptReady !== true ||
   health?.realtimeAgent?.staleTruncateRecoveryReady !== true ||
   health?.realtimeAgent?.automaticLegacyFailoverReady !== true ||
   health?.realtimeAgent?.scriptedReplyPrimary !== false
@@ -87,6 +90,9 @@ const report = {
   forcedToolQuestionReady: health.realtimeAgent.forcedToolQuestionReady,
   ambiguousConfirmationGuardReady: health.realtimeAgent.ambiguousConfirmationGuardReady,
   nextAvailabilityToolReady: health.realtimeAgent.nextAvailabilityToolReady,
+  commentaryAudioSuppressionReady: health.realtimeAgent.commentaryAudioSuppressionReady,
+  forcedSpeechToolLockReady: health.realtimeAgent.forcedSpeechToolLockReady,
+  naturalReceptionPromptReady: health.realtimeAgent.naturalReceptionPromptReady,
   staleTruncateRecoveryReady: health.realtimeAgent.staleTruncateRecoveryReady,
   automaticLegacyFailoverReady: health.realtimeAgent.automaticLegacyFailoverReady,
   scriptedReplyPrimary: health.realtimeAgent.scriptedReplyPrimary,

@@ -66,6 +66,10 @@ const preCheckSpeech = extractTranscript(response);
 if (/空き(?:が)?(?:あります|ございます|空いています|確認できました)|ご案内可能/u.test(preCheckSpeech)) {
   throw new Error(`Model claimed availability before the tool result: ${preCheckSpeech}`);
 }
+const preCheckFinalSpeech = extractUserVisibleTranscript(response);
+if (preCheckFinalSpeech) {
+  throw new Error(`Model emitted caller-visible speech before the availability tool: ${preCheckFinalSpeech}`);
+}
 const availabilityArgs = parseArguments(availabilityCall);
 if (Number(availabilityArgs.course_duration_min) !== 90 || availabilityArgs.booking_type !== "free") {
   throw new Error(`Availability arguments were incorrect: ${availabilityCall.arguments}`);
@@ -87,7 +91,10 @@ sendToolOutput(socket, availabilityCall.call_id, {
 });
 let nameQuestion = "";
 for (let attempt = 0; attempt < 3 && !nameQuestion; attempt += 1) {
-  response = await createResponseAndWait(socket, events);
+  response = await createResponseAndWait(socket, events, {
+    toolChoice: "none",
+    instructions: "次の質問だけを、前置きや補足を加えず自然に話してください。話した後は利用者の返答を待ってください。\n空いております。よろしければ、お名前をお願いします。名字だけで結構です。"
+  });
   nameQuestion = extractTranscript(response);
   if (nameQuestion) break;
   const stateCall = findToolCall(response, "record_booking_details") ?? findToolCall(response, "get_reception_state");
@@ -164,7 +171,9 @@ console.log(JSON.stringify({
     asksForNameAfterAvailability: true,
     recordsNameWithAvailabilityToken: true,
     nextAvailabilityToolSelected: true,
-    nextAvailabilityArgumentsCorrect: true
+    nextAvailabilityArgumentsCorrect: true,
+    noFinalSpeechBeforeAvailability: true,
+    forcedQuestionDisablesTools: true
   }
 }, null, 2));
 
@@ -190,8 +199,11 @@ function sendToolOutput(ws, callId, output) {
   }));
 }
 
-async function createResponseAndWait(ws, queue) {
-  ws.send(JSON.stringify({ type: "response.create", response: { output_modalities: ["audio"] } }));
+async function createResponseAndWait(ws, queue, options = {}) {
+  const response = { output_modalities: ["audio"] };
+  if (options.toolChoice) response.tool_choice = options.toolChoice;
+  if (options.instructions) response.instructions = options.instructions;
+  ws.send(JSON.stringify({ type: "response.create", response }));
   const event = await queue.waitFor((item) => item.type === "response.done", 30000);
   if (event.response?.status !== "completed") {
     throw new Error(`Realtime response did not complete: ${JSON.stringify(event.response?.status_details ?? {})}`);
@@ -220,6 +232,16 @@ function extractTranscript(response) {
     .join("\n")
     .trim();
   return embedded || String(response?.verificationTranscript ?? "").trim();
+}
+
+function extractUserVisibleTranscript(response) {
+  return (response?.output ?? [])
+    .filter((item) => item?.phase !== "commentary")
+    .flatMap((item) => item?.content ?? [])
+    .map((content) => content?.transcript ?? content?.text ?? "")
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 }
 
 function createEventQueue(ws) {

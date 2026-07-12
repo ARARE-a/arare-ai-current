@@ -339,7 +339,7 @@ const server = http.createServer(async (request, response) => {
           vadEagerness: realtimeAgentVadEagerness,
           responseWatchdogMs: realtimeAgentResponseWatchdogMs,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 3,
+          conversationFlowVersion: 4,
           scriptedReplyPrimary: false,
           reservationToolGateReady: true,
           explicitConfirmationGateReady: true,
@@ -347,6 +347,9 @@ const server = http.createServer(async (request, response) => {
           forcedToolQuestionReady: true,
           ambiguousConfirmationGuardReady: true,
           nextAvailabilityToolReady: true,
+          commentaryAudioSuppressionReady: true,
+          forcedSpeechToolLockReady: true,
+          naturalReceptionPromptReady: true,
           staleTruncateRecoveryReady: true,
           automaticLegacyFailoverReady: true,
           duplicateToolCallGuardReady: true,
@@ -2449,11 +2452,7 @@ function extractTherapistSelectionName(text, therapists) {
   if (strictMatch.confidence >= THERAPIST_MATCH_CONFIDENCE_THRESHOLD) {
     return strictMatch.therapist?.displayName || strictMatch.therapist?.name || "";
   }
-
-  const looseMatch = normalized.match(/(?:\u3058\u3083\u3042|\u3067\u306f|\u305d\u308c\u306a\u3089)?([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}A-Za-z\u30fc]{1,8})(?:\u3055\u3093|\u3061\u3083\u3093)?(?:\u3067|\u6307\u540d|\u304a\u9858\u3044)$/u);
-  const candidate = looseMatch?.[1] ?? "";
-  if (!candidate || isNonNameCandidate(candidate)) return "";
-  return candidate;
+  return "";
 }
 
 function namesLookSame(left, right) {
@@ -2539,7 +2538,7 @@ function seedCallerPhoneCandidate(session) {
 function buildCallerPhoneCandidateQuestion(draft) {
   const candidate = normalizePhoneForComparison(draft?.callerPhoneCandidate);
   if (!isLikelyCustomerPhone(candidate) || draft?.callerPhoneCandidateRejected) return "";
-  return `ショートメッセージは、今おかけの番号、下4桁${phoneLast4(candidate)}へ送ってよろしいですか？`;
+  return `SMSは今のお電話番号、下4桁${phoneLast4(candidate)}でよろしいですか？`;
 }
 
 function clearCallerPhoneCandidate(draft, rejected = false) {
@@ -8384,16 +8383,27 @@ function createRealtimeAgentState() {
 function buildRealtimeAgentInstructions(session) {
   const callerLast4 = phoneLast4(session.from);
   return [
+    "# 役割",
     "あなたはARARE AIの電話予約受付です。利用者の生音声を直接理解し、あなた自身の音声で応答します。",
     "必ず日本語の自然な標準語だけで話してください。英語、ローマ字、翻訳調、英語風の相づちは禁止です。",
-    "落ち着いた成人男性の電話受付として、1回の発話は原則1〜2文、質問は1つだけにします。",
+    "落ち着いた成人男性の受付スタッフとして、丁寧ですが堅すぎない話し方にします。",
+    "",
+    "# 発話チャネル",
+    "commentaryフェーズでは利用者向け音声を一切出さず、必要なツールだけを呼びます。",
+    "利用者に聞かせる質問と案内はfinal_answerフェーズだけに出します。",
+    "ツール実行前後の状況説明、進捗説明、思考の読み上げは不要です。",
+    "",
+    "# 会話テンポ",
+    "1回の発話は原則1〜2文、質問は1つだけにします。回答を受けたら、短い相づきが自然に必要な場合を除き、すぐ次の質問またはツール実行へ進みます。",
     "不足項目は一度に並べず、日時、コース、指名条件などを会話に合わせて1項目ずつ確認します。",
     "既に聞いた情報を再質問しません。曖昧な場合だけ、推定した候補を短く復唱して確認します。",
     "聞き取りが曖昧な言葉を勝手に予約情報へ変換しません。候補を1つだけ示して『60分でよろしいですか』のように確認します。",
     "利用者が話し始めたら発話を止め、割り込み後の内容に答えてください。",
-    "利用者の返答を受ける前に『ありがとうございます』と先へ進んではいけません。",
+    "利用者の返答を受ける前に、同意済み・確認済みとして先へ進んではいけません。",
+    "『では』『ありがとうございます』『かしこまりました』を毎回の発話の先頭に付けません。必要な時だけ使います。",
     "ツールを呼ぶターンでは前置きや『少しお待ちください』を話さず、ツールだけを呼びます。ツール結果の質問を話した後は返答を待ちます。",
-    "『同意を前提に』『準備を進めます』『必要事項へ進みます』などの内部処理を思わせる表現は禁止です。",
+    "『条件を整えます』『少し確認してから』『次の必要事項へ進みます』『確認してから進めます』『確認済みとして処理します』『同意を受けて手続きします』『準備を進めます』は禁止です。",
+    "指名条件は『フリーとご指名、どちらですか』と短く聞き、利用者から求められない限りセラピスト全員の名前を列挙しません。",
     "ツール名、内部トークン、JSON、システム、プロンプトという言葉を利用者へ話してはいけません。",
     "",
     "予約の絶対ルール:",
@@ -8402,11 +8412,11 @@ function buildRealtimeAgentInstructions(session) {
     "2. check_availabilityがAVAILABLEを返す前に、名前や電話番号を質問してはいけません。",
     "3. 空き確認後、得た情報をrecord_booking_detailsへ記録します。既知の情報は再質問しません。",
     callerLast4
-      ? `4. SMS送信先は、まず「今おかけの番号、下4桁${callerLast4}へ送ってよろしいですか」と確認し、同意後だけuse_caller_numberを使います。`
+      ? `4. SMS送信先は、まず「SMSは今のお電話番号、下4桁${callerLast4}でよろしいですか」と確認し、同意後だけuse_caller_numberを使います。`
       : "4. SMS送信先の電話番号は11桁で確認します。",
     "5. 初回利用か再来かを確認し、注意事項と店舗ルールを確認済みか明示的に確認します。",
     "   初回・再来は『初めてです』『以前も利用しました』などの明示回答だけを記録します。『はい』『ありがとう』『すごい』から推測しません。",
-    "6. 必須情報が揃ったらprepare_final_confirmationを呼び、返されたspoken_summaryを省略せず読み上げます。",
+    "6. record_booking_detailsがDETAILS_COMPLETEを返したら何も話さず、すぐprepare_final_confirmationを呼び、返されたspoken_summaryを省略せず読み上げます。",
     "7. 復唱を読み上げた後の、利用者の明確な同意を聞いてからcreate_reservation_holdを呼びます。",
     "   曖昧な返答では、成功したように礼を言ったり処理開始を案内したりせず、その返答をそのままツールで検証します。",
     "8. create_reservation_holdが成功する前に『予約できました』『確定しました』『SMSを送りました』と言ってはいけません。",
@@ -8414,7 +8424,7 @@ function buildRealtimeAgentInstructions(session) {
     "10. 変更が入ったら古い復唱を使わず、必要なツールを再実行します。",
     "",
     "ツール出力ルール:",
-    "- message_for_customer、next_question、spoken_summary、spoken_replyがある場合は、その意味を変えず短く話します。",
+    "- message_for_customer、next_question、spoken_summary、spoken_replyがある場合は、前置きを付けず、その文だけを話します。",
     "- spoken_summaryとspoken_replyは内容を省略したり、事実を追加したりしません。",
     "- エラー時は同じ質問を連続で繰り返さず、具体的に不足している1項目だけを確認します。",
     "- DB確認が失敗した場合は予約可能と答えず、店舗確認へ切り替えます。",
@@ -8725,7 +8735,7 @@ async function checkRealtimeAgentAvailability(session, args) {
       therapist_name: check.selectedTherapist?.displayName ?? null,
       booking_type: bookingType
     },
-    next_question: "空きを確認できました。お名前をお願いします。名字だけでも大丈夫です。"
+    next_question: "空いております。よろしければ、お名前をお願いします。名字だけで結構です。"
   };
 }
 
@@ -8737,7 +8747,7 @@ async function findRealtimeAgentNextAvailability(session, args) {
       ok: false,
       code: "COURSE_NOT_FOUND",
       available_course_minutes: (context?.courses ?? []).map((item) => item.durationMin),
-      next_question: "60分、90分、120分のどのコースをご希望ですか？"
+      next_question: "ご希望は60分、90分、120分のどれですか？"
     };
   }
 
@@ -8826,7 +8836,7 @@ async function findRealtimeAgentNextAvailability(session, args) {
       therapist_name: check.selectedTherapist?.displayName ?? nextSlot.therapist?.displayName ?? null,
       booking_type: bookingType
     },
-    next_question: `最短では${formatDateTimeJa(check.startsAt)}をご案内できます。よろしければ、お名前をお願いします。`
+    next_question: `最短は${formatDateTimeJa(check.startsAt)}です。よろしければ、お名前をお願いします。`
   };
 }
 
@@ -8847,7 +8857,7 @@ function recordRealtimeAgentBookingDetails(session, args) {
         ok: false,
         code: "CALLER_PHONE_CONFIRMATION_REQUIRED",
         next_question: candidate
-          ? `ショートメッセージは、今おかけの番号、下4桁${phoneLast4(candidate)}へ送ってよろしいですか？`
+          ? `SMSは今のお電話番号、下4桁${phoneLast4(candidate)}でよろしいですか？`
           : "ショートメッセージを送る電話番号を11桁でお願いします。"
       };
     }
@@ -8862,7 +8872,7 @@ function recordRealtimeAgentBookingDetails(session, args) {
       return {
         ok: false,
         code: "ATTENTION_CONFIRMATION_REQUIRED",
-        next_question: "注意事項と店舗ルールを確認済みでしたら、『確認しました』とお願いします。"
+        next_question: "注意事項と店舗ルールはご確認済みですか？"
       };
     }
   }
@@ -8878,7 +8888,7 @@ function recordRealtimeAgentBookingDetails(session, args) {
       return {
         ok: false,
         code: "FIRST_VISIT_CONFIRMATION_REQUIRED",
-        next_question: "初めてのご利用ですか？それとも、以前にもご利用がありますか？"
+        next_question: "当店は初めてですか、以前にもご利用がありますか？"
       };
     }
   }
@@ -8917,11 +8927,14 @@ function recordRealtimeAgentBookingDetails(session, args) {
   if (changed) invalidateRealtimeAgentConfirmation(session);
 
   const nextField = getRealtimeAgentNextRequiredField(draft);
+  const nextQuestion = buildRealtimeAgentNextQuestion(draft, nextField);
   return {
     ok: true,
     code: nextField ? "DETAILS_RECORDED" : "DETAILS_COMPLETE",
     next_required_field: nextField,
-    next_question: buildRealtimeAgentNextQuestion(draft, nextField)
+    ...(nextQuestion
+      ? { next_question: nextQuestion }
+      : { continue_with: "prepare_final_confirmation" })
   };
 }
 
@@ -9092,18 +9105,18 @@ function getRealtimeAgentNextRequiredField(draft) {
 }
 
 function buildRealtimeAgentNextQuestion(draft, field) {
-  if (!field) return "必要な情報が揃いました。内容を最終確認します。";
+  if (!field) return null;
   if (field === "availability") return "ご希望の日時とコース時間をお願いします。";
   if (field === "customer_name") return "お名前をお願いします。名字だけでも大丈夫です。";
   if (field === "phone") {
     const candidate = normalizePhoneForComparison(draft?.callerPhoneCandidate);
     return candidate
-      ? `ショートメッセージは、今おかけの番号、下4桁${phoneLast4(candidate)}へ送ってよろしいですか？`
+      ? `SMSは今のお電話番号、下4桁${phoneLast4(candidate)}でよろしいですか？`
       : "ショートメッセージを送る電話番号を11桁でお願いします。";
   }
   if (field === "course") return "ご希望のコース時間をお願いします。";
-  if (field === "first_visit") return "初めてのご利用ですか？それとも、以前にもご利用がありますか？";
-  if (field === "attention") return "注意事項と店舗ルールを確認済みでしたら、『確認しました』とお願いします。";
+  if (field === "first_visit") return "当店は初めてですか、以前にもご利用がありますか？";
+  if (field === "attention") return "注意事項と店舗ルールはご確認済みですか？";
   return "不足している内容を一つ確認します。";
 }
 

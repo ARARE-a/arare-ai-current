@@ -37,8 +37,12 @@ export class OpenAiRealtimeAgentBridge {
     this.responseHadAudio = false;
     this.responseHadToolCall = false;
     this.currentResponseId = undefined;
+    this.activeOutputItemId = undefined;
     this.currentOutputItemId = undefined;
     this.currentAssistantTranscript = "";
+    this.outputItemPhases = new Map();
+    this.outputItemTranscripts = new Map();
+    this.suppressedCommentaryItems = new Set();
     this.currentOutputBytes = 0;
     this.firstOutputAudioAt = 0;
     this.markCounter = 0;
@@ -151,7 +155,10 @@ export class OpenAiRealtimeAgentBridge {
   startGreeting(text) {
     const greeting = String(text ?? "").trim();
     if (!greeting) return;
-    this.requestResponse(`最初の挨拶として、次の一文だけを自然に話してください。内容を追加しないでください。\n${greeting}`);
+    this.requestResponse(
+      `最初の挨拶として、次の一文だけを自然に話してください。内容を追加しないでください。\n${greeting}`,
+      { toolChoice: "none" }
+    );
   }
 
   requestResponse(instructions, options = {}) {
@@ -159,6 +166,7 @@ export class OpenAiRealtimeAgentBridge {
     if (options.terminal === true) this.terminalPending = true;
     const response = { output_modalities: ["audio"] };
     if (instructions) response.instructions = instructions;
+    if (options.toolChoice) response.tool_choice = options.toolChoice;
     this.openai.send(JSON.stringify({ type: "response.create", response }));
   }
 
@@ -196,21 +204,46 @@ export class OpenAiRealtimeAgentBridge {
       return;
     }
     if (event.type === "response.output_item.added") {
-      if (event.item?.type === "message" && event.item?.id) {
-        this.currentOutputItemId = event.item.id;
-        this.currentOutputBytes = 0;
-        this.firstOutputAudioAt = 0;
+      const itemId = String(event.item?.id ?? "");
+      if (itemId) {
+        this.activeOutputItemId = itemId;
+        this.outputItemPhases.set(itemId, normalizeOutputPhase(event.item?.phase));
+      }
+      if (event.item?.type === "function_call") {
+        this.responseHadToolCall = true;
+        this.clearResponseWatchdog();
+      }
+      if (event.item?.type === "message" && itemId) {
+        this.outputItemTranscripts.set(itemId, "");
+        if (!this.isSuppressedCommentary(itemId)) {
+          this.currentOutputItemId = itemId;
+          this.currentOutputBytes = 0;
+          this.firstOutputAudioAt = 0;
+        }
       }
       return;
     }
     if (event.type === "response.output_audio_transcript.delta" || event.type === "response.audio_transcript.delta") {
-      this.currentAssistantTranscript += String(event.delta ?? "");
+      const itemId = this.resolveOutputItemId(event.item_id);
+      const transcript = (this.outputItemTranscripts.get(itemId) ?? "") + String(event.delta ?? "");
+      if (itemId) this.outputItemTranscripts.set(itemId, transcript);
+      if (!this.isSuppressedCommentary(itemId)) this.currentAssistantTranscript = transcript;
       return;
     }
     if (event.type === "response.output_audio_transcript.done" || event.type === "response.audio_transcript.done") {
-      const transcript = String(event.transcript ?? this.currentAssistantTranscript).trim();
+      const itemId = this.resolveOutputItemId(event.item_id);
+      const transcript = String(event.transcript ?? this.outputItemTranscripts.get(itemId) ?? "").trim();
+      if (this.isSuppressedCommentary(itemId)) {
+        this.log("openai_realtime_agent_commentary_suppressed", {
+          itemId,
+          textLength: transcript.length
+        });
+        this.outputItemTranscripts.delete(itemId);
+        return;
+      }
       this.currentAssistantTranscript = transcript;
-      if (transcript) await this.onAssistantTranscript(transcript, event.item_id ?? this.currentOutputItemId);
+      if (transcript) await this.onAssistantTranscript(transcript, itemId || this.currentOutputItemId);
+      this.outputItemTranscripts.delete(itemId);
       return;
     }
     if (event.type === "response.output_audio.delta" || event.type === "response.audio.delta") {
@@ -238,6 +271,7 @@ export class OpenAiRealtimeAgentBridge {
     this.responseHadAudio = false;
     this.responseHadToolCall = false;
     this.currentResponseId = responseId;
+    this.activeOutputItemId = undefined;
     this.currentOutputItemId = undefined;
     this.currentAssistantTranscript = "";
     this.currentOutputBytes = 0;
@@ -251,7 +285,14 @@ export class OpenAiRealtimeAgentBridge {
 
   streamAudioToTwilio(delta, itemId) {
     if (!delta || !this.streamSid || this.twilioSocket.readyState !== OPEN) return;
-    const resolvedItemId = String(itemId ?? this.currentOutputItemId ?? "");
+    const resolvedItemId = this.resolveOutputItemId(itemId);
+    if (this.isSuppressedCommentary(resolvedItemId)) {
+      if (!this.suppressedCommentaryItems.has(resolvedItemId)) {
+        this.suppressedCommentaryItems.add(resolvedItemId);
+        this.log("openai_realtime_agent_commentary_audio_suppressed", { itemId: resolvedItemId });
+      }
+      return;
+    }
     if (resolvedItemId && resolvedItemId !== this.currentOutputItemId) {
       this.currentOutputItemId = resolvedItemId;
       this.currentOutputBytes = 0;
@@ -278,12 +319,13 @@ export class OpenAiRealtimeAgentBridge {
     const toolCalls = (response?.output ?? []).filter((item) => item?.type === "function_call");
     if (toolCalls.length) {
       this.responseHadToolCall = true;
+      this.clearResponseOutputItems(response);
       await this.executeToolCalls(toolCalls);
       return;
     }
 
     if (!this.currentAssistantTranscript) {
-      const transcript = extractAudioTranscript(response);
+      const transcript = extractUserVisibleAudioTranscript(response);
       if (transcript) {
         this.currentAssistantTranscript = transcript;
         await this.onAssistantTranscript(transcript, this.currentOutputItemId);
@@ -296,6 +338,7 @@ export class OpenAiRealtimeAgentBridge {
       hadAudio: this.responseHadAudio
     });
     if (this.responseHadAudio) this.sendPlaybackMark();
+    this.clearResponseOutputItems(response);
   }
 
   async executeToolCalls(toolCalls) {
@@ -352,7 +395,31 @@ export class OpenAiRealtimeAgentBridge {
         }
       }));
     }
-    if (executed > 0 && this.openai?.readyState === OPEN) this.requestResponse(forcedSpeechInstruction || undefined);
+    if (executed > 0 && this.openai?.readyState === OPEN) {
+      this.requestResponse(
+        forcedSpeechInstruction || undefined,
+        forcedSpeechInstruction ? { toolChoice: "none" } : undefined
+      );
+    }
+  }
+
+  resolveOutputItemId(itemId) {
+    return String(itemId ?? this.activeOutputItemId ?? this.currentOutputItemId ?? "");
+  }
+
+  isSuppressedCommentary(itemId) {
+    return Boolean(itemId) && this.outputItemPhases.get(itemId) === "commentary";
+  }
+
+  clearResponseOutputItems(response) {
+    for (const item of response?.output ?? []) {
+      const itemId = String(item?.id ?? "");
+      if (!itemId) continue;
+      this.outputItemPhases.delete(itemId);
+      this.outputItemTranscripts.delete(itemId);
+      this.suppressedCommentaryItems.delete(itemId);
+    }
+    this.activeOutputItemId = undefined;
   }
 
   interruptPlayback() {
@@ -421,6 +488,9 @@ export class OpenAiRealtimeAgentBridge {
   close() {
     this.closed = true;
     this.clearResponseWatchdog();
+    this.outputItemPhases.clear();
+    this.outputItemTranscripts.clear();
+    this.suppressedCommentaryItems.clear();
     if (this.openai?.readyState === OPEN) this.openai.close();
   }
 }
@@ -433,13 +503,18 @@ function summarizeTranscriptionConfidence(logprobs) {
   return Number(Math.max(0, Math.min(1, probability)).toFixed(4));
 }
 
-function extractAudioTranscript(response) {
+function extractUserVisibleAudioTranscript(response) {
   return (response?.output ?? [])
+    .filter((item) => normalizeOutputPhase(item?.phase) !== "commentary")
     .flatMap((item) => item?.content ?? [])
     .map((content) => content?.transcript ?? "")
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+function normalizeOutputPhase(phase) {
+  return phase === "commentary" ? "commentary" : "final_answer";
 }
 
 function createOpenAiSocket(url, options) {

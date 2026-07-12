@@ -111,7 +111,15 @@ function sendPrompt({ callSid, text, received }) {
       reject(new Error(`Timed out after ${timeoutMs}ms for ${callSid}`));
     }, timeoutMs);
     const tokens = [];
+    let promptSent = false;
+    let promptTimer;
     const ws = new WebSocket(relayUrl);
+    const sendVoicePrompt = () => {
+      if (promptSent || ws.readyState !== WebSocket.OPEN) return;
+      promptSent = true;
+      if (promptTimer) clearTimeout(promptTimer);
+      ws.send(JSON.stringify({ type: "prompt", voicePrompt: text, lang: "ja-JP", last: true }));
+    };
     ws.on("open", () => {
       ws.send(
         JSON.stringify({
@@ -131,22 +139,27 @@ function sendPrompt({ callSid, text, received }) {
           }
         })
       );
-      setTimeout(() => {
-        ws.send(JSON.stringify({ type: "prompt", voicePrompt: text, lang: "ja-JP", last: true }));
-      }, 100);
+      promptTimer = setTimeout(sendVoicePrompt, 5000);
     });
     ws.on("message", (raw) => {
       const message = JSON.parse(raw.toString());
       received.push(message);
+      if (!promptSent) {
+        if (message.type === "text" && message.last === true) sendVoicePrompt();
+        return;
+      }
+      if (isInitialListeningGreeting(message) && tokens.length === 0) return;
       if (message.type === "text" && message.token) tokens.push(String(message.token));
       if (message.type === "end" || (message.type === "text" && message.last === true)) {
         clearTimeout(timeout);
+        if (promptTimer) clearTimeout(promptTimer);
         ws.close();
         resolve(tokens.join(""));
       }
     });
     ws.on("error", (error) => {
       clearTimeout(timeout);
+      if (promptTimer) clearTimeout(promptTimer);
       reject(error);
     });
   });
@@ -177,8 +190,7 @@ function assertCase(row, responseText) {
     "\u304a\u540d\u524d",
     "\u4e88\u7d04\u8005\u69d8",
     "\u96fb\u8a71\u756a\u53f7",
-    "\u3054\u9023\u7d61\u5148",
-    "\u30b3\u30fc\u30b9\u306f"
+    "\u3054\u9023\u7d61\u5148"
   ];
   const availabilityWords = [
     "\u304a\u65e5\u306b\u3061",
@@ -187,6 +199,8 @@ function assertCase(row, responseText) {
     "\u304a\u6642\u9593",
     "\u6642\u9593",
     "\u4f55\u6642",
+    "\u4f55\u5206",
+    "\u30b3\u30fc\u30b9",
     "\u7a7a\u304d",
     "\u5019\u88dc",
     "\u78ba\u8a8d",
@@ -203,13 +217,17 @@ function assertCase(row, responseText) {
     "\u663c",
     "\u591c",
     "\u4f55\u6642",
+    "\u4f55\u5206",
+    "\u3044\u3064\u9803",
+    "\u30b3\u30fc\u30b9",
     "\u304a\u6642\u9593",
     "\u6642\u9593",
     "\u304a\u65e5\u306b\u3061",
     "\u65e5\u4ed8",
     "\u65e5\u6642",
     "\u3082\u3046\u4e00\u5ea6",
-    "\u6559\u3048\u3066"
+    "\u6559\u3048\u3066",
+    "\u3088\u308d\u3057\u3044"
   ];
   const asksCustomerInfoTooEarly =
     hasAny(sourceText, customerInfoWords) && !hasAny(sourceText, availabilityWords);
@@ -275,7 +293,7 @@ function assertCase(row, responseText) {
   }
 
   if (category === "repeat_response_guard") {
-    if (!hasAny(sourceText, ["\u5019\u88dc", "\u5225", "\u78ba\u8a8d", "\u7a7a\u304d", "\u304a\u8abf\u3079", "\u65e5\u6642", "\u65e5\u4ed8", "\u6642\u9593", "\u304a\u6642\u9593", "\u30aa\u30da\u30ec\u30fc\u30bf\u30fc", "\u5e97\u8217"])) {
+    if (!hasAny(sourceText, ["\u5019\u88dc", "\u5225", "\u78ba\u8a8d", "\u7a7a\u304d", "\u304a\u8abf\u3079", "\u65e5\u6642", "\u65e5\u4ed8", "\u6642\u9593", "\u304a\u6642\u9593", "\u30b3\u30fc\u30b9", "\u4f55\u5206", "\u30aa\u30da\u30ec\u30fc\u30bf\u30fc", "\u5e97\u8217"])) {
       failures.push("repeat_without_escape_route");
     }
   }
@@ -295,6 +313,12 @@ function assertCase(row, responseText) {
   }
 
   return { pass: failures.length === 0, failures };
+}
+
+function isInitialListeningGreeting(message) {
+  if (message?.type !== "text" || message?.last !== true) return false;
+  const text = normalize(message.token);
+  return text === normalize("お電話ありがとうございます。ご希望をどうぞ。");
 }
 function buildSummary(items) {
   const failedItems = items.filter((item) => !item.pass);
