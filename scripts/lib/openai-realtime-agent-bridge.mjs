@@ -66,6 +66,7 @@ export class OpenAiRealtimeAgentBridge {
     this.processedResponseIds = new Set();
     this.terminalPending = false;
     this.consecutiveToolTurns = 0;
+    this.consecutiveNoAudioResponses = 0;
     this.speechTurns = new Map();
     this.partialInputTranscripts = new Map();
     this.pendingTurnResponse = undefined;
@@ -343,6 +344,7 @@ export class OpenAiRealtimeAgentBridge {
       this.firstOutputAudioAt = 0;
     }
     this.responseHadAudio = true;
+    this.consecutiveNoAudioResponses = 0;
     this.consecutiveToolTurns = 0;
     if (!this.firstOutputAudioAt) {
       this.firstOutputAudioAt = Date.now();
@@ -401,6 +403,29 @@ export class OpenAiRealtimeAgentBridge {
       if (this.responseHadAudio) this.sendPlaybackMark();
       this.clearResponseOutputItems(response);
       await this.executeToolCalls(toolCalls);
+      return;
+    }
+
+    if (!this.responseHadAudio) {
+      this.consecutiveNoAudioResponses += 1;
+      this.log("openai_realtime_agent_completed_without_audio", {
+        responseId,
+        consecutiveNoAudioResponses: this.consecutiveNoAudioResponses,
+        status: response?.status ?? "unknown"
+      });
+      this.clearResponseOutputItems(response);
+      if (this.pendingTurnResponse) {
+        this.flushPendingTurnResponse();
+        return;
+      }
+      if (this.consecutiveNoAudioResponses <= 1 && this.openai?.readyState === OPEN) {
+        this.requestResponse(
+          "直前の応答は利用者へ音声が届きませんでした。ツールを呼ばず、直前の会話に対する答えだけを短い自然な日本語の音声で一度話してください。",
+          { toolChoice: "none" }
+        );
+        return;
+      }
+      await this.fail(new Error("OpenAI Realtime agent completed repeatedly without caller audio"));
       return;
     }
 
@@ -488,6 +513,18 @@ export class OpenAiRealtimeAgentBridge {
             exactSpokenFollowUp = {
               name: item.name,
               text: spokenSummary
+            };
+          }
+        }
+        if (
+          item.name === "search_store_knowledge" &&
+          result?.ok === true
+        ) {
+          const spokenCourseComparison = normalizeExactSpokenSummary(result?.spoken_course_comparison);
+          if (spokenCourseComparison) {
+            exactSpokenFollowUp = {
+              name: item.name,
+              text: spokenCourseComparison
             };
           }
         }

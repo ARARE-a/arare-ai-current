@@ -36,12 +36,14 @@ assert.equal(health?.ok, true, "Production relay must be healthy");
 assert.equal(health?.databaseHealth?.ok, true, "Production database must be healthy");
 assert.equal(health?.realtimeAgent?.enabled, true, "GPT Realtime agent must be enabled");
 assert.equal(health?.realtimeAgent?.architecture, "native-speech-to-speech");
-assert.equal(health?.realtimeAgent?.conversationFlowVersion, 12);
+assert.equal(health?.realtimeAgent?.conversationFlowVersion, 13);
 assert.equal(health?.realtimeAgent?.model, "gpt-realtime-2.1");
 assert.equal(health?.realtimeAgent?.voice, "cedar");
 assert.equal(health?.realtimeAgent?.transcriptionModel, "gpt-4o-transcribe");
 assert.equal(health?.realtimeAgent?.vadEagerness, "medium");
 assert.equal(health?.realtimeAgent?.completeCourseComparisonFactsReady, true);
+assert.equal(health?.realtimeAgent?.deterministicCourseComparisonSpeechReady, true);
+assert.equal(health?.realtimeAgent?.noAudioResponseRecoveryReady, true);
 
 const synthesizedQuestion = await synthesizeJapanesePcm(question);
 const questionPcmu = pcm24kToPcmu8k(synthesizedQuestion);
@@ -65,16 +67,16 @@ const media = await openMediaStream({
 let greetingPacket;
 let answerPackets;
 try {
-  greetingPacket = await media.nextMarkedAudio(timeoutMs);
+  greetingPacket = await media.nextMarkedAudio(timeoutMs, "initial greeting");
   assert.ok(greetingPacket.audio.length > 4000, "Realtime greeting did not contain audible media");
 
   await delay(250);
   media.beginCallerTurn();
   const inputCompletedAt = await media.sendCallerAudio(questionPcmu);
-  answerPackets = [await media.nextMarkedAudio(timeoutMs)];
+  answerPackets = [await media.nextMarkedAudio(timeoutMs, "course answer")];
   while (answerPackets.length < 4) {
     try {
-      answerPackets.push(await media.nextMarkedAudio(4000));
+      answerPackets.push(await media.nextMarkedAudio(4000, "course answer follow-up"));
     } catch (error) {
       if (isTimeoutError(error)) break;
       throw error;
@@ -85,10 +87,18 @@ try {
   media.close();
 }
 
-const greetingTranscript = await transcribePcmu(greetingPacket.audio, "greeting.wav");
+const greetingTranscript = await transcribePcmu(
+  greetingPacket.audio,
+  "greeting.wav",
+  "ARARE AIによる日本語の電話受付挨拶です。"
+);
 const answerAudio = joinPcmuPackets(answerPackets.map((packet) => packet.audio));
 assert.ok(answerAudio.length > 4000, "Realtime course answer did not contain audible media");
-const answerTranscript = await transcribePcmu(answerAudio, "course-answer.wav");
+const answerTranscript = await transcribePcmu(
+  answerAudio,
+  "course-answer.wav",
+  "ARARE AIの日本語コース案内です。60分、90分、12000円、17000円などの時間と料金が含まれる場合があります。"
+);
 const normalizedAnswer = normalizeTranscript(answerTranscript);
 const firstAnswerAudioAt = answerPackets
   .map((packet) => packet.firstAudioAt)
@@ -255,7 +265,7 @@ function openMediaStream({ websocketUrl, websocketSignature, customParameters })
     while (waiters.length) waiters.shift().reject(error);
   }
 
-  async function nextMarkedAudio(waitTimeoutMs) {
+  async function nextMarkedAudio(waitTimeoutMs, stage = "audio response") {
     await opened;
     if (closedError) throw closedError;
     if (responseQueue.length) return responseQueue.shift();
@@ -264,7 +274,12 @@ function openMediaStream({ websocketUrl, websocketSignature, customParameters })
       const timer = setTimeout(() => {
         const index = waiters.indexOf(waiter);
         if (index !== -1) waiters.splice(index, 1);
-        reject(new Error(`Production Realtime marked audio timed out after ${waitTimeoutMs}ms`));
+        reject(
+          new Error(
+            `Production Realtime ${stage} timed out after ${waitTimeoutMs}ms ` +
+            `(CallSid ${callSid}, callerTurnStarted ${callerTurnStarted})`
+          )
+        );
       }, waitTimeoutMs);
       waiter.resolve = (value) => {
         clearTimeout(timer);
@@ -350,13 +365,14 @@ async function synthesizeJapanesePcm(text) {
   return buffer;
 }
 
-async function transcribePcmu(pcmu, filename) {
+async function transcribePcmu(pcmu, filename, prompt) {
   const wav = pcmuToWav(pcmu);
   const form = new FormData();
   form.append("file", new Blob([wav], { type: "audio/wav" }), filename);
   form.append("model", "gpt-4o-transcribe");
   form.append("language", "ja");
   form.append("response_format", "json");
+  if (prompt) form.append("prompt", prompt);
   const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
     headers: { authorization: `Bearer ${openAiKey}` },
@@ -373,12 +389,21 @@ async function transcribePcmu(pcmu, filename) {
 
 function pcm24kToPcmu8k(pcm) {
   const sampleCount = Math.floor(pcm.length / 2);
-  const output = Buffer.alloc(Math.floor(sampleCount / 3));
-  for (let outputIndex = 0, sampleIndex = 0; outputIndex < output.length; outputIndex += 1, sampleIndex += 3) {
+  const downsampled = new Int16Array(Math.floor(sampleCount / 3));
+  let peak = 0;
+  for (let outputIndex = 0, sampleIndex = 0; outputIndex < downsampled.length; outputIndex += 1, sampleIndex += 3) {
     const first = pcm.readInt16LE(sampleIndex * 2);
     const second = pcm.readInt16LE((sampleIndex + 1) * 2);
     const third = pcm.readInt16LE((sampleIndex + 2) * 2);
-    output[outputIndex] = linearPcmToMulaw(Math.round((first + second + third) / 3));
+    const sample = Math.round((first + second + third) / 3);
+    downsampled[outputIndex] = sample;
+    peak = Math.max(peak, Math.abs(sample));
+  }
+  if (peak < 200) throw new Error(`Synthesized Japanese question was effectively silent (peak ${peak})`);
+  const gain = Math.max(0.6, Math.min(4, 18000 / peak));
+  const output = Buffer.alloc(downsampled.length);
+  for (let index = 0; index < downsampled.length; index += 1) {
+    output[index] = linearPcmToMulaw(Math.round(downsampled[index] * gain));
   }
   return output;
 }

@@ -404,8 +404,9 @@ const server = http.createServer(async (request, response) => {
           truncationPostInstructionsTokens: realtimeAgentTruncationPostInstructionsTokens,
           boundedConversationContextReady: true,
           responseWatchdogMs: realtimeAgentResponseWatchdogMs,
+          noAudioResponseRecoveryReady: true,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 12,
+          conversationFlowVersion: 13,
           scriptedReplyPrimary: false,
           manualTurnControlReady: realtimeAgentManualTurnControl,
           automaticVadResponseDisabled: realtimeAgentManualTurnControl,
@@ -447,6 +448,7 @@ const server = http.createServer(async (request, response) => {
           autonomousConversationReady: true,
           structuredToolFactsReady: true,
           completeCourseComparisonFactsReady: true,
+          deterministicCourseComparisonSpeechReady: true,
           fixedToolUtterancesDisabled: true,
           storeKnowledgeToolReady: true,
           freeTalkSideTopicReady: true,
@@ -8951,7 +8953,7 @@ function buildRealtimeAgentInstructions(session) {
     "# 発話とツール",
     "DBの空き確認または最短検索の直前だけ『確認しますね』と一度話して構いません。照会後は『確認できました』を重ねず、結果をすぐ伝えます。",
     "ツール出力は原則として読み上げ原稿ではなく、事実、制約、許可された次の行動です。結果を理解したうえで、会話に合う自然な応答、質問、別ツールの実行をあなた自身で選んでください。response_policyがある場合は、対象漏れ、長さ、禁止事項に関する制約を守ります。",
-    "唯一の例外として、prepare_final_confirmationがspoken_summaryを返した時は、その一文だけを省略・言い換え・追加なしで一度読み上げ、利用者の返答を待ちます。",
+    "唯一の例外として、prepare_final_confirmationがspoken_summaryを返した時、またはsearch_store_knowledgeがspoken_course_comparisonを返した時は、その一文だけを省略・言い換え・追加なしで一度読み上げます。",
     "保持情報に自信がなければget_reception_stateを使い、店舗固有の質問で本文が必要ならsearch_store_knowledgeを使います。検索結果がない内容は推測せず、未確認であることを正直に伝えます。",
     "ツール名、内部トークン、JSON、システム、プロンプト、処理手順を利用者へ話してはいけません。",
     "",
@@ -9258,6 +9260,9 @@ async function searchRealtimeAgentStoreKnowledge(session, args) {
   const callerQuestion = getRealtimeAgentLastCustomerText(session);
   const courseQuestionText = `${callerQuestion} ${query}`.trim();
   const registeredCourseFacts = buildRealtimeCourseKnowledgeFacts(context?.courses ?? [], courseQuestionText);
+  const spokenCourseComparison = registeredCourseFacts.length >= 2
+    ? buildExactCourseComparisonSpeech(registeredCourseFacts)
+    : undefined;
   const candidates = [
     ...(context?.knowledge ?? []).map((item) => ({
       type: "knowledge",
@@ -9297,10 +9302,12 @@ async function searchRealtimeAgentStoreKnowledge(session, args) {
     found: matches.length > 0,
     matches,
     registered_course_facts: registeredCourseFacts,
+    spoken_course_comparison: spokenCourseComparison,
     response_policy: registeredCourseFacts.length
       ? {
           answer_all_registered_course_facts: true,
           omit_unrequested_safety_disclaimers: true,
+          exact_spoken_comparison: Boolean(spokenCourseComparison),
           max_spoken_sentences: 2,
           max_spoken_characters: 100
         }
@@ -9329,6 +9336,15 @@ function buildRealtimeCourseKnowledgeFacts(courses, question) {
     price_yen: Number(course.price),
     registered_description: sanitizeCourseDescriptionForSpeech(course.description) || null
   }));
+}
+
+function buildExactCourseComparisonSpeech(facts) {
+  const clauses = facts
+    .filter((course) => Number.isFinite(course?.duration_min) && Number.isFinite(course?.price_yen))
+    .sort((left, right) => left.duration_min - right.duration_min)
+    .map((course) => `${course.duration_min}分は${formatYen(course.price_yen)}`);
+  if (clauses.length < 2) return undefined;
+  return `${clauses.join("、")}です。主な違いは利用時間と料金です。`;
 }
 
 function truncateRealtimeKnowledgeText(value) {

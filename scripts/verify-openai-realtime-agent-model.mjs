@@ -149,10 +149,20 @@ if (knowledgeCall) {
     .sort((left, right) => left - right);
   if (comparedDurations.join(",") !== "60,90") {
     throw new Error(`Course comparison facts were incomplete: ${JSON.stringify(knowledgeOutput)}`);
+    }
+    sendToolOutput(socket, knowledgeCall.call_id, knowledgeOutput);
+    const exactCourseComparison = String(knowledgeOutput.spoken_course_comparison ?? "").trim();
+    response = await createResponseAndWait(socket, events, exactCourseComparison
+      ? {
+          toolChoice: "none",
+          instructions: [
+            "次のutteranceの値だけを、日本語で一度だけ、そのまま読み上げてください。",
+            "言い換え、要約、省略、補足、前置き、後置き、ツール呼び出しは禁止です。",
+            JSON.stringify({ utterance: exactCourseComparison })
+          ].join("\n")
+        }
+      : {});
   }
-  sendToolOutput(socket, knowledgeCall.call_id, knowledgeOutput);
-  response = await createResponseAndWait(socket, events);
-}
 const sideTopicReply = extractUserVisibleTranscript(response);
 if (!sideTopicReply || !/(?:60|六十).*(?:90|九十)|(?:90|九十).*(?:60|六十)/u.test(sideTopicReply)) {
   throw new Error(`Model did not naturally answer the side question: ${sideTopicReply || JSON.stringify(response?.output ?? [])}`);

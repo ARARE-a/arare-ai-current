@@ -68,6 +68,13 @@ const bridge = new OpenAiRealtimeAgentBridge({
   onAssistantTranscript: async (text) => assistantTranscripts.push(text),
   onToolCall: async (call) => {
     toolCalls.push(call);
+    if (call.name === "search_store_knowledge") {
+      return {
+        ok: true,
+        code: "KNOWLEDGE_FOUND",
+        spoken_course_comparison: "60分は12,000円、90分は17,000円です。主な違いは利用時間と料金です。"
+      };
+    }
     if (call.name === "prepare_final_confirmation") {
       return {
         ok: true,
@@ -154,6 +161,10 @@ await tick();
 assert.equal(twilio.sent.length, twilioMessagesBeforeCommentary, "commentary audio must not reach the caller");
 assert.deepEqual(assistantTranscripts, [], "suppressed commentary must not enter the call transcript");
 assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_commentary_audio_suppressed"));
+assert.equal(openai.sent.at(-1).type, "response.create");
+assert.equal(openai.sent.at(-1).response.tool_choice, "none");
+assert.match(openai.sent.at(-1).response.instructions, /利用者へ音声が届きませんでした/u);
+assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_completed_without_audio"));
 
 bridge.startGreeting();
 assert.equal(openai.sent.at(-1).type, "response.create");
@@ -228,6 +239,27 @@ openai.emit("message", JSON.stringify(toolResponse));
 await tick();
 assert.equal(toolCalls.length, 1, "duplicate tool call IDs must not execute twice");
 assert.equal(openai.sent.filter((item) => item.type === "response.create").length, responseCreateCount);
+
+openai.emit("message", JSON.stringify({
+  type: "response.done",
+  response: {
+    id: "resp_course_comparison_tool",
+    status: "completed",
+    output: [{
+      type: "function_call",
+      name: "search_store_knowledge",
+      call_id: "call_course_comparison_1",
+      arguments: JSON.stringify({ query: "60分と90分の違い" })
+    }]
+  }
+}));
+await tick();
+const exactCourseComparisonRequest = openai.sent.at(-1);
+assert.equal(exactCourseComparisonRequest.type, "response.create");
+assert.equal(exactCourseComparisonRequest.response.tool_choice, "none");
+assert.match(exactCourseComparisonRequest.response.instructions, /60分は12,000円/u);
+assert.match(exactCourseComparisonRequest.response.instructions, /90分は17,000円/u);
+assert.match(exactCourseComparisonRequest.response.instructions, /言い換え、要約、省略、補足/u);
 
 openai.emit("message", JSON.stringify({
   type: "response.done",

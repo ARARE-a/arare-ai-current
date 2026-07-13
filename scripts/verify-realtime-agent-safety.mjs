@@ -104,7 +104,7 @@ assert.match(instructions, /初回・再来と注意事項確認を独立した�
 assert.match(instructions, /比較対象として挙げられた全コースの時間と料金を一度に答え/);
 assert.match(instructions, /聞かれていない禁止事項や性的サービスの注意書きを自発的に付けません/);
 assert.match(instructions, /ツール出力は原則として読み上げ原稿ではなく/);
-assert.match(instructions, /prepare_final_confirmationがspoken_summaryを返した時/);
+assert.match(instructions, /search_store_knowledgeがspoken_course_comparisonを返した時/);
 assert.match(instructions, /部屋、内部担当、電話番号、来店歴は読み上げません/);
 assert.match(instructions, /DBの空き確認または最短検索の直前だけ『確認しますね』/);
 assert.match(instructions, /先へ進めません.*禁止/);
@@ -119,6 +119,11 @@ assert.deepEqual(
 );
 assert.equal(courseKnowledge.response_policy.answer_all_registered_course_facts, true);
 assert.equal(courseKnowledge.response_policy.omit_unrequested_safety_disclaimers, true);
+assert.equal(courseKnowledge.response_policy.exact_spoken_comparison, true);
+assert.equal(
+  courseKnowledge.spoken_course_comparison,
+  "60分は12,000円、90分は17,000円です。主な違いは利用時間と料金です。"
+);
 assert.equal(classifyRealtimeAgentFailure(new Error("insufficient_quota")), "OPENAI_INSUFFICIENT_QUOTA");
 assert.equal(classifyRealtimeAgentFailure(new Error("rate_limit_exceeded")), "OPENAI_RATE_LIMIT");
 const outageFallbackXml = buildRealtimeAgentOutageFallbackXml();
