@@ -498,6 +498,10 @@ async function verifyCombinedIdentityScenario({ apiKey: key, model: modelName, v
         ready_for_final_confirmation: false
       },
       do_not_repeat_collected_fields: ["customer_name", "phone"],
+      response_policy: {
+        do_not_echo_collected_fields: true,
+        ask_one_missing_field_only: true
+      },
       ready_for_final_confirmation: false,
       allowed_actions: ["answer_questions", "record_booking_details", "ask_about_any_missing_field"]
     });
@@ -512,9 +516,14 @@ async function verifyCombinedIdentityScenario({ apiKey: key, model: modelName, v
       throw new Error(`Model did not continue after collecting identity: ${JSON.stringify(identityResponse?.output ?? [])}`);
     }
     if (
-      /(?:お名前|氏名).{0,20}(?:教えて|確認|名乗|よろしい)|(?:電話番号|下4桁).{0,24}(?:教えて|読み上げ|送ってよい|送ってもよい|許可|同意)/u.test(nextFollowUp)
+      /(?:お名前|氏名).{0,20}(?:教えて|お聞かせ|名乗って|でよろしいですか)|(?:電話番号|下4桁).{0,24}(?:教えて|読み上げて|送ってよいですか|送ってもよいですか|許可してください|同意してください)/u.test(nextFollowUp)
     ) {
       throw new Error(`Model asked for already collected identity again: ${nextFollowUp}`);
+    }
+    if (
+      /(?:お名前|氏名).{0,30}(?:確認でき|お受けして|承知)|(?:電話番号|下4桁|今おかけの番号).{0,40}(?:確認でき|お受けして|承知|送信して)/u.test(nextFollowUp)
+    ) {
+      throw new Error(`Model echoed already collected identity instead of moving on: ${nextFollowUp}`);
     }
     return { nextFollowUp };
   } finally {

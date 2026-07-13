@@ -12,6 +12,8 @@ export class OpenAiRealtimeAgentBridge {
     this.transcriptionModel = options.transcriptionModel;
     this.instructions = options.instructions;
     this.tools = options.tools ?? [];
+    this.reasoningEffort = normalizeReasoningEffort(options.reasoningEffort);
+    this.commentaryAudioEnabled = options.commentaryAudioEnabled === true;
     this.vadEagerness = options.vadEagerness ?? "medium";
     this.manualTurnControl = options.manualTurnControl !== false;
     this.bargeInDelayMs = clampNumber(options.bargeInDelayMs, 250, 1200, 450);
@@ -26,6 +28,7 @@ export class OpenAiRealtimeAgentBridge {
     this.onToolCall = options.onToolCall ?? (async () => ({ ok: false, code: "TOOL_NOT_IMPLEMENTED" }));
     this.onUsage = options.onUsage ?? (() => {});
     this.onLatency = options.onLatency ?? (() => {});
+    this.onToolLatency = options.onToolLatency ?? (() => {});
     this.onSpeechStarted = options.onSpeechStarted ?? (() => {});
     this.onSpeechStopped = options.onSpeechStopped ?? (() => {});
     this.onPlaybackComplete = options.onPlaybackComplete ?? (() => {});
@@ -66,6 +69,8 @@ export class OpenAiRealtimeAgentBridge {
     this.activeTurnStartedAt = 0;
     this.activeTurnItemId = undefined;
     this.activeTurnVadDecisionLatencyMs = null;
+    this.activeTurnTranscriptionLatencyMs = null;
+    this.activeTurnResponseRequestedAt = 0;
     this.toolExecutionActive = false;
     this.inputAudioTimelineOriginAt = undefined;
   }
@@ -120,6 +125,7 @@ export class OpenAiRealtimeAgentBridge {
         instructions: this.instructions,
         tools: this.tools,
         tool_choice: "auto",
+        reasoning: { effort: this.reasoningEffort },
         audio: {
           input: {
             format: { type: "audio/pcmu" },
@@ -330,10 +336,16 @@ export class OpenAiRealtimeAgentBridge {
       if (this.activeTurnStartedAt > 0) {
         const latencyMs = Math.max(0, this.firstOutputAudioAt - this.activeTurnStartedAt);
         const vadDecisionLatencyMs = finiteNumberOrNull(this.activeTurnVadDecisionLatencyMs);
+        const transcriptionLatencyMs = finiteNumberOrNull(this.activeTurnTranscriptionLatencyMs);
+        const modelFirstAudioLatencyMs = this.activeTurnResponseRequestedAt > 0
+          ? Math.max(0, this.firstOutputAudioAt - this.activeTurnResponseRequestedAt)
+          : null;
         const detail = {
           latencyMs,
           vadDecisionLatencyMs,
           postVadLatencyMs: vadDecisionLatencyMs === null ? null : Math.max(0, latencyMs - vadDecisionLatencyMs),
+          transcriptionLatencyMs,
+          modelFirstAudioLatencyMs,
           itemId: this.activeTurnItemId ?? null
         };
         this.log("openai_realtime_agent_response_latency", detail);
@@ -341,6 +353,8 @@ export class OpenAiRealtimeAgentBridge {
         this.activeTurnStartedAt = 0;
         this.activeTurnItemId = undefined;
         this.activeTurnVadDecisionLatencyMs = null;
+        this.activeTurnTranscriptionLatencyMs = null;
+        this.activeTurnResponseRequestedAt = 0;
       }
     }
     this.currentOutputBytes += Buffer.from(delta, "base64").length;
@@ -378,7 +392,7 @@ export class OpenAiRealtimeAgentBridge {
     }
 
     if (!this.currentAssistantTranscript) {
-      const transcript = extractUserVisibleAudioTranscript(response);
+      const transcript = extractUserVisibleAudioTranscript(response, this.commentaryAudioEnabled);
       if (transcript) {
         this.currentAssistantTranscript = transcript;
         await this.onAssistantTranscript(transcript, this.currentOutputItemId);
@@ -421,6 +435,7 @@ export class OpenAiRealtimeAgentBridge {
             allowed_actions: ["close_call"]
           };
         } else {
+          const toolStartedAt = Date.now();
           try {
             result = await this.onToolCall({ name: item.name, arguments: args, callId });
           } catch (error) {
@@ -435,6 +450,14 @@ export class OpenAiRealtimeAgentBridge {
               error: { reason: "tool_execution_failed" },
               allowed_actions: ["explain_unavailable", "continue_without_action"]
             };
+          } finally {
+            const detail = {
+              name: String(item.name ?? ""),
+              callId,
+              latencyMs: Math.max(0, Date.now() - toolStartedAt)
+            };
+            this.log("openai_realtime_agent_tool_latency", detail);
+            this.onToolLatency(detail);
           }
         }
         if (result?.terminal === true) {
@@ -491,7 +514,9 @@ export class OpenAiRealtimeAgentBridge {
   }
 
   isSuppressedCommentary(itemId) {
-    return Boolean(itemId) && this.outputItemPhases.get(itemId) === "commentary";
+    return !this.commentaryAudioEnabled &&
+      Boolean(itemId) &&
+      this.outputItemPhases.get(itemId) === "commentary";
   }
 
   clearResponseOutputItems(response) {
@@ -643,6 +668,7 @@ export class OpenAiRealtimeAgentBridge {
     if (turn) {
       const eventReceivedAt = Date.now();
       turn.stoppedAt = this.resolveAcousticTimestamp(audioEndMs, eventReceivedAt);
+      turn.speechStoppedEventAt = eventReceivedAt;
       turn.vadDecisionLatencyMs = Math.max(0, eventReceivedAt - turn.stoppedAt);
       turn.durationMs = Number.isFinite(turn.audioStartMs) && Number.isFinite(audioEndMs)
         ? Math.max(0, audioEndMs - turn.audioStartMs)
@@ -706,6 +732,9 @@ export class OpenAiRealtimeAgentBridge {
     const transcript = String(event.transcript ?? this.partialInputTranscripts.get(itemId) ?? "").trim();
     const confidence = summarizeTranscriptionConfidence(event.logprobs);
     const turn = this.speechTurns.get(itemId);
+    const transcriptionLatencyMs = turn?.speechStoppedEventAt
+      ? Math.max(0, Date.now() - turn.speechStoppedEventAt)
+      : null;
     if (turn?.interruptTimer) clearTimeout(turn.interruptTimer);
     if (turn?.sustainedSpeechTimer) clearTimeout(turn.sustainedSpeechTimer);
     if (turn?.transcriptionTimer) clearTimeout(turn.transcriptionTimer);
@@ -720,7 +749,8 @@ export class OpenAiRealtimeAgentBridge {
       assistantWasPlaying: turn?.assistantWasPlaying === true,
       interrupted: turn?.interrupted === true,
       interruptReason: turn?.interruptReason ?? null,
-      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs ?? null
+      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs ?? null,
+      transcriptionLatencyMs
     });
     if (!transcript) {
       if (this.openai?.readyState === OPEN && itemId) {
@@ -739,7 +769,8 @@ export class OpenAiRealtimeAgentBridge {
       assistantWasPlaying: turn?.assistantWasPlaying === true,
       interrupted: turn?.interrupted === true,
       interruptReason: turn?.interruptReason ?? null,
-      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs ?? null
+      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs ?? null,
+      transcriptionLatencyMs
     };
     const callbackDecision = await this.onCustomerTranscript(transcript, itemId, metadata);
     if (!this.manualTurnControl) return;
@@ -766,7 +797,8 @@ export class OpenAiRealtimeAgentBridge {
           toolChoice: "none",
           startedAt: turn?.stoppedAt || Date.now(),
           itemId,
-          vadDecisionLatencyMs: turn?.vadDecisionLatencyMs
+          vadDecisionLatencyMs: turn?.vadDecisionLatencyMs,
+          transcriptionLatencyMs
         });
       }
       return;
@@ -784,7 +816,8 @@ export class OpenAiRealtimeAgentBridge {
       toolChoice: lowConfidence ? "none" : decision.toolChoice,
       startedAt: turn?.stoppedAt || Date.now(),
       itemId,
-      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs
+      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs,
+      transcriptionLatencyMs
     });
   }
 
@@ -835,6 +868,8 @@ export class OpenAiRealtimeAgentBridge {
     this.activeTurnStartedAt = Number(pending.startedAt) || Date.now();
     this.activeTurnItemId = pending.itemId;
     this.activeTurnVadDecisionLatencyMs = finiteNumberOrNull(pending.vadDecisionLatencyMs);
+    this.activeTurnTranscriptionLatencyMs = finiteNumberOrNull(pending.transcriptionLatencyMs);
+    this.activeTurnResponseRequestedAt = Date.now();
     this.requestResponse(pending.instructions, { toolChoice: pending.toolChoice });
   }
 
@@ -910,14 +945,19 @@ function clampNumber(value, min, max, fallback) {
   return Math.max(min, Math.min(max, number));
 }
 
+function normalizeReasoningEffort(value) {
+  const effort = String(value ?? "low").trim().toLowerCase();
+  return ["minimal", "low", "medium", "high"].includes(effort) ? effort : "low";
+}
+
 function finiteNumberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
-function extractUserVisibleAudioTranscript(response) {
+function extractUserVisibleAudioTranscript(response, commentaryAudioEnabled = false) {
   return (response?.output ?? [])
-    .filter((item) => normalizeOutputPhase(item?.phase) !== "commentary")
+    .filter((item) => commentaryAudioEnabled || normalizeOutputPhase(item?.phase) !== "commentary")
     .flatMap((item) => item?.content ?? [])
     .map((content) => content?.transcript ?? "")
     .filter(Boolean)

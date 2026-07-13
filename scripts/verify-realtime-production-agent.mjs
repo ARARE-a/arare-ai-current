@@ -25,7 +25,10 @@ if (
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 7 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 8 ||
+  health?.realtimeAgent?.reasoningEffort !== "low" ||
+  health?.realtimeAgent?.vadEagerness !== "high" ||
+  health?.realtimeAgent?.preambleAudioEnabled !== true ||
   health?.realtimeAgent?.manualTurnControlReady !== true ||
   health?.realtimeAgent?.automaticVadResponseDisabled !== true ||
   health?.realtimeAgent?.automaticVadInterruptDisabled !== true ||
@@ -37,6 +40,7 @@ if (
   health?.realtimeAgent?.latencyTelemetryReady !== true ||
   health?.realtimeAgent?.latencySummaryReady !== true ||
   health?.realtimeAgent?.latencyPersistenceReady !== true ||
+  health?.realtimeAgent?.stageLatencyTelemetryReady !== true ||
   health?.realtimeAgent?.nonBlockingConversationPersistenceReady !== true ||
   health?.realtimeAgent?.partialBookingDetailsReady !== true ||
   health?.realtimeAgent?.idempotentCollectedFieldsReady !== true ||
@@ -47,7 +51,11 @@ if (
   health?.realtimeAgent?.forcedToolQuestionReady !== false ||
   health?.realtimeAgent?.ambiguousConfirmationGuardReady !== true ||
   health?.realtimeAgent?.nextAvailabilityToolReady !== true ||
-  health?.realtimeAgent?.commentaryAudioSuppressionReady !== true ||
+  health?.realtimeAgent?.commentaryAudioSuppressionReady !== false ||
+  health?.realtimeAgent?.toolPreambleAudioReady !== true ||
+  health?.realtimeAgent?.duplicateTurnSuppressionReady !== true ||
+  health?.realtimeAgent?.duplicateTurnWindowMs !== 8000 ||
+  health?.realtimeAgent?.relativeHourEvidenceReady !== true ||
   health?.realtimeAgent?.forcedSpeechToolLockReady !== false ||
   health?.realtimeAgent?.naturalReceptionPromptReady !== true ||
   health?.realtimeAgent?.autonomousConversationReady !== true ||

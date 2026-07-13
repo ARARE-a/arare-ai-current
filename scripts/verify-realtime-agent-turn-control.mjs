@@ -80,6 +80,36 @@ for (let index = 0; index < 100; index += 1) {
   check(decision.toolChoice, "none");
 }
 
+for (let index = 0; index < 100; index += 1) {
+  const session = createPhoneSession();
+  session.realtimeAgentState = createRealtimeAgentState();
+  session.lastAssistantText = "空きを確認しています。少々お待ちください。";
+  session.realtimeAgentState.userSpeechSequence = 1;
+  const first = classifyRealtimeAgentCustomerTurn(session, "今かけている番号で大丈夫です", {
+    confidence: 0.98,
+    receivedAt: 1000
+  });
+  session.realtimeAgentState.userSpeechSequence = 2;
+  const duplicate = classifyRealtimeAgentCustomerTurn(session, "この電話番号を使ってください", {
+    confidence: 0.98,
+    receivedAt: 5000
+  });
+  check(first.reason, "normal_turn");
+  check(duplicate.reason, "duplicate_turn_during_response_wait");
+  check(duplicate.ignore, true);
+  check(
+    session.realtimeAgentState.lastUserTranscriptSpeechSequence,
+    session.realtimeAgentState.userSpeechSequence,
+    "ignored duplicate must preserve the accepted turn for an in-flight tool call"
+  );
+  session.realtimeAgentState.userSpeechSequence = 3;
+  const afterWindow = classifyRealtimeAgentCustomerTurn(session, "この電話番号を使ってください", {
+    confidence: 0.98,
+    receivedAt: 10000
+  });
+  check(afterWindow.reason, "normal_turn", "the duplicate window must not suppress a later intentional answer");
+}
+
 const courses = [
   { name: "60分リラックスコース", durationMin: 60, price: 12000 },
   { name: "90分スタンダードコース", durationMin: 90, price: 17000 },
@@ -96,6 +126,21 @@ for (let index = 0; index < 300; index += 1) {
     content: `明日の${hour}時から${course.durationMin}分でお願いします`
   }];
   check(validateRealtimeAgentAvailabilityEvidence(session, startsAt, course), null);
+}
+
+for (let index = 0; index < 100; index += 1) {
+  const session = createPhoneSession();
+  session.realtimeAgentState = createRealtimeAgentState();
+  session.setupAt = new Date("2026-07-13T10:03:00.000Z").getTime();
+  const course = pick(courses, random);
+  session.conversationTurns = [{
+    role: "CUSTOMER",
+    content: `2時間後から${course.durationMin}分でお願いします`
+  }];
+  const supportedStart = new Date("2026-07-13T12:00:00.000Z");
+  const unsupportedStart = new Date("2026-07-13T13:00:00.000Z");
+  check(validateRealtimeAgentAvailabilityEvidence(session, supportedStart, course), null);
+  check(validateRealtimeAgentAvailabilityEvidence(session, unsupportedStart, course)?.code, "DATETIME_EVIDENCE_REQUIRED");
 }
 
 for (let index = 0; index < 150; index += 1) {
@@ -286,7 +331,7 @@ check(openai.sent.some((item) => item.type === "response.cancel"), true);
 bridge.close();
 console.log(JSON.stringify({
   ok: true,
-  randomizedPolicyCases: 1300,
+  randomizedPolicyCases: 1500,
   longConversationTurns: 120,
   checks
 }, null, 2));

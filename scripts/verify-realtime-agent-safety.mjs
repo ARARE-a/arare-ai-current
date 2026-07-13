@@ -91,7 +91,10 @@ assert.match(instructions, /予約途中の質問、訂正、割り込み、雑�
 assert.match(instructions, /ツール出力は読み上げ原稿ではなく/);
 assert.match(instructions, /単なる相づちから推測しません/);
 assert.match(instructions, /合計料金、担当、部屋/);
-assert.match(instructions, /commentaryフェーズは内部処理専用/);
+assert.match(instructions, /commentaryフェーズは、DBや店舗情報を確認するツールの直前/);
+assert.match(instructions, /内部推論や長い進捗説明は話しません/);
+assert.match(instructions, /通話開始時刻（日本時間）/);
+assert.match(instructions, /相対時刻/);
 assert.doesNotMatch(instructions, /next_question|message_for_customer|spoken_summary|spoken_reply/);
 assert.equal(classifyRealtimeAgentFailure(new Error("insufficient_quota")), "OPENAI_INSUFFICIENT_QUOTA");
 assert.equal(classifyRealtimeAgentFailure(new Error("rate_limit_exceeded")), "OPENAI_RATE_LIMIT");

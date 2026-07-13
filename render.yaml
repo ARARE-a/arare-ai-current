@@ -30,8 +30,12 @@ services:
         value: cedar
       - key: OPENAI_REALTIME_AGENT_TRANSCRIPTION_MODEL
         value: gpt-4o-transcribe
+      - key: OPENAI_REALTIME_AGENT_REASONING_EFFORT
+        value: low
       - key: OPENAI_REALTIME_AGENT_VAD_EAGERNESS
-        value: medium
+        value: high
+      - key: OPENAI_REALTIME_AGENT_PREAMBLE_AUDIO_ENABLED
+        value: "true"
       - key: OPENAI_REALTIME_AGENT_MANUAL_TURN_CONTROL
         value: "true"
       - key: OPENAI_REALTIME_AGENT_BARGE_IN_DELAY_MS
@@ -42,6 +46,8 @@ services:
         value: "0.58"
       - key: OPENAI_REALTIME_AGENT_TRANSCRIPTION_WATCHDOG_MS
         value: "2500"
+      - key: OPENAI_REALTIME_AGENT_DUPLICATE_TURN_WINDOW_MS
+        value: "8000"
       - key: OPENAI_REALTIME_AGENT_RESPONSE_WATCHDOG_MS
         value: "12000"
       - key: OPENAI_REALTIME_REQUIRE_TWILIO_SIGNATURE

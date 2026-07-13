@@ -33,6 +33,7 @@ const toolCalls = [];
 const playbackEvents = [];
 const usageEvents = [];
 const latencyEvents = [];
+const toolLatencyEvents = [];
 const bridgeErrors = [];
 const bridgeLogs = [];
 const tools = [
@@ -86,6 +87,7 @@ const bridge = new OpenAiRealtimeAgentBridge({
   },
   onUsage: (source, usage) => usageEvents.push({ source, usage }),
   onLatency: (event) => latencyEvents.push(event),
+  onToolLatency: (event) => toolLatencyEvents.push(event),
   onPlaybackComplete: (event) => playbackEvents.push(event),
   onError: async (error) => bridgeErrors.push(error.message)
 });
@@ -94,6 +96,7 @@ await bridge.connect();
 const sessionUpdate = openai.sent[0];
 assert.equal(sessionUpdate.type, "session.update");
 assert.equal(sessionUpdate.session.model, "gpt-realtime-2.1");
+assert.equal(sessionUpdate.session.reasoning.effort, "low");
 assert.equal(sessionUpdate.session.audio.input.turn_detection.create_response, false);
 assert.equal(sessionUpdate.session.audio.input.turn_detection.interrupt_response, false);
 assert.equal(sessionUpdate.session.audio.output.voice, "cedar");
@@ -197,6 +200,9 @@ openai.emit("message", JSON.stringify(toolResponse));
 await tick();
 assert.equal(toolCalls.length, 1);
 assert.equal(toolCalls[0].name, "check_availability");
+assert.equal(toolLatencyEvents.length, 1);
+assert.equal(toolLatencyEvents[0].name, "check_availability");
+assert.ok(toolLatencyEvents[0].latencyMs >= 0);
 const toolOutput = openai.sent.find((item) => item.type === "conversation.item.create" && item.item.call_id === "call_availability_1");
 assert.ok(toolOutput);
 assert.equal(JSON.parse(toolOutput.item.output).code, "AVAILABLE");
@@ -401,6 +407,54 @@ for (let index = 1; index <= 2; index += 1) {
 }
 assert.match(openai.sent.at(-1).response.instructions, /これ以上ツールを呼ばず/);
 assert.equal(openai.sent.at(-1).response.tool_choice, "none");
+
+const preambleTwilio = new FakeSocket();
+preambleTwilio.open();
+const preambleOpenAi = new FakeSocket();
+const preambleTranscripts = [];
+const preambleBridge = new OpenAiRealtimeAgentBridge({
+  twilioSocket: preambleTwilio,
+  apiKey: "test-key",
+  model: "gpt-realtime-2.1",
+  voice: "cedar",
+  transcriptionModel: "gpt-4o-transcribe",
+  instructions: "日本語で応答してください。",
+  commentaryAudioEnabled: true,
+  openAiSocketFactory: () => {
+    queueMicrotask(() => preambleOpenAi.open());
+    return preambleOpenAi;
+  },
+  onAssistantTranscript: async (text) => preambleTranscripts.push(text)
+});
+await preambleBridge.connect();
+await preambleBridge.handleTwilioMessage({
+  event: "start",
+  streamSid: "MZ_PREAMBLE_TEST",
+  start: { streamSid: "MZ_PREAMBLE_TEST", callSid: "CA_PREAMBLE_TEST" }
+});
+preambleOpenAi.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_preamble" } }));
+preambleOpenAi.emit("message", JSON.stringify({
+  type: "response.output_item.added",
+  item: { id: "item_preamble", type: "message", phase: "commentary" }
+}));
+preambleOpenAi.emit("message", JSON.stringify({
+  type: "response.output_audio_transcript.done",
+  item_id: "item_preamble",
+  transcript: "確認しますね。"
+}));
+preambleOpenAi.emit("message", JSON.stringify({
+  type: "response.output_audio.delta",
+  item_id: "item_preamble",
+  delta: Buffer.alloc(160).toString("base64")
+}));
+preambleOpenAi.emit("message", JSON.stringify({
+  type: "response.done",
+  response: { id: "resp_preamble", status: "completed", output: [] }
+}));
+await tick();
+assert.ok(preambleTwilio.sent.some((item) => item.event === "media"));
+assert.deepEqual(preambleTranscripts, ["確認しますね。"]);
+preambleBridge.close();
 assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_tool_loop_guard"));
 
 openai.emit("message", JSON.stringify({
@@ -419,7 +473,7 @@ assert.equal(openai.sent.at(-1).type, "response.create");
 assert.equal(openai.sent.at(-1).response.tool_choice, "none");
 
 bridge.close();
-console.log(JSON.stringify({ ok: true, checks: 58 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 67 }, null, 2));
 
 function tick() {
   return new Promise((resolve) => setImmediate(resolve));

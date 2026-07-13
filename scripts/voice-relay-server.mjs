@@ -44,6 +44,10 @@ const realtimeAgentEnabled = process.env.OPENAI_REALTIME_AGENT_ENABLED === "true
 const realtimeAgentModel = process.env.OPENAI_REALTIME_AGENT_MODEL ?? realtimeMediaModel;
 const realtimeAgentVoice = process.env.OPENAI_REALTIME_AGENT_VOICE ?? realtimeMediaVoice;
 const realtimeAgentTranscriptionModel = process.env.OPENAI_REALTIME_AGENT_TRANSCRIPTION_MODEL ?? realtimeMediaTranscriptionModel;
+const realtimeAgentReasoningEffort = normalizeRealtimeReasoningEffort(
+  process.env.OPENAI_REALTIME_AGENT_REASONING_EFFORT ?? "low"
+);
+const realtimeAgentPreambleAudioEnabled = process.env.OPENAI_REALTIME_AGENT_PREAMBLE_AUDIO_ENABLED !== "false";
 const realtimeAgentVadEagerness = normalizeRealtimeVadEagerness(
   process.env.OPENAI_REALTIME_AGENT_VAD_EAGERNESS ?? realtimeMediaVadEagerness
 );
@@ -70,6 +74,12 @@ const realtimeAgentTranscriptionWatchdogMs = boundedNumberEnv(
   2500,
   1000,
   5000
+);
+const realtimeAgentDuplicateTurnWindowMs = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_DUPLICATE_TURN_WINDOW_MS",
+  8000,
+  3000,
+  15000
 );
 const realtimeAgentQuotaCircuitMs = Math.max(
   30000,
@@ -368,10 +378,12 @@ const server = http.createServer(async (request, response) => {
           model: realtimeAgentModel,
           voice: realtimeAgentVoice,
           transcriptionModel: realtimeAgentTranscriptionModel,
+          reasoningEffort: realtimeAgentReasoningEffort,
+          preambleAudioEnabled: realtimeAgentPreambleAudioEnabled,
           vadEagerness: realtimeAgentVadEagerness,
           responseWatchdogMs: realtimeAgentResponseWatchdogMs,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 7,
+          conversationFlowVersion: 8,
           scriptedReplyPrimary: false,
           manualTurnControlReady: realtimeAgentManualTurnControl,
           automaticVadResponseDisabled: realtimeAgentManualTurnControl,
@@ -384,6 +396,7 @@ const server = http.createServer(async (request, response) => {
           latencyTelemetryReady: true,
           latencySummaryReady: true,
           latencyPersistenceReady: true,
+          stageLatencyTelemetryReady: true,
           nonBlockingConversationPersistenceReady: true,
           partialBookingDetailsReady: true,
           idempotentCollectedFieldsReady: true,
@@ -396,7 +409,11 @@ const server = http.createServer(async (request, response) => {
           forcedToolQuestionReady: false,
           ambiguousConfirmationGuardReady: true,
           nextAvailabilityToolReady: true,
-          commentaryAudioSuppressionReady: true,
+          commentaryAudioSuppressionReady: !realtimeAgentPreambleAudioEnabled,
+          toolPreambleAudioReady: realtimeAgentPreambleAudioEnabled,
+          duplicateTurnSuppressionReady: true,
+          duplicateTurnWindowMs: realtimeAgentDuplicateTurnWindowMs,
+          relativeHourEvidenceReady: true,
           forcedSpeechToolLockReady: false,
           naturalReceptionPromptReady: true,
           autonomousConversationReady: true,
@@ -649,6 +666,9 @@ function createPhoneSession() {
     realtimeAgentLatenciesMs: [],
     realtimeAgentVadDecisionLatenciesMs: [],
     realtimeAgentPostVadLatenciesMs: [],
+    realtimeAgentTranscriptionLatenciesMs: [],
+    realtimeAgentModelFirstAudioLatenciesMs: [],
+    realtimeAgentToolLatenciesMs: [],
     lastRealtimeAgentTurnDecision: undefined
   };
 }
@@ -1042,6 +1062,8 @@ agentWss.on("connection", (twilioSocket) => {
         model: realtimeAgentModel,
         voice: realtimeAgentVoice,
         transcriptionModel: realtimeAgentTranscriptionModel,
+        reasoningEffort: realtimeAgentReasoningEffort,
+        commentaryAudioEnabled: realtimeAgentPreambleAudioEnabled,
         vadEagerness: realtimeAgentVadEagerness,
         manualTurnControl: realtimeAgentManualTurnControl,
         bargeInDelayMs: realtimeAgentBargeInDelayMs,
@@ -1054,15 +1076,23 @@ agentWss.on("connection", (twilioSocket) => {
         log: (event, data) => logRelay(event, { callSid: session.callSid, ...data }),
         onCustomerTranscript: async (transcript, itemId, metadata = {}) => {
           session.firstPromptReceived = true;
+          clearRealtimeAgentNoPromptWatchdog(session);
+          const decision = classifyRealtimeAgentCustomerTurn(session, transcript, metadata);
+          session.lastRealtimeAgentTurnDecision = decision;
+          if (decision.ignore === true) {
+            logRelay("openai_realtime_agent_customer_turn_ignored", {
+              callSid: session.callSid,
+              itemId,
+              reason: decision.reason ?? "ignored"
+            });
+            return decision;
+          }
           session.lastUserTranscriptConfidence = metadata.confidence;
           session.lastUserTranscriptionItemId = itemId;
           session.lastUserUtterance = transcript;
           session.realtimeAgentState.lastUserTranscript = transcript;
           session.realtimeAgentState.lastUserTranscriptSpeechSequence = session.realtimeAgentState.userSpeechSequence;
-          clearRealtimeAgentNoPromptWatchdog(session);
           pushCustomerTranscript(session, transcript);
-          const decision = classifyRealtimeAgentCustomerTurn(session, transcript, metadata);
-          session.lastRealtimeAgentTurnDecision = decision;
           enqueuePhonePersistence(session, "realtime_customer_turn", async () => {
             await appendPhoneConversationMessage(session, "CUSTOMER", transcript);
             await upsertCallLog(session, "TRANSCRIBED");
@@ -1084,7 +1114,13 @@ agentWss.on("connection", (twilioSocket) => {
         onUsage: (source, usage) => {
           addVoiceUsage(session.usageAccumulator, source, usage);
         },
-        onLatency: ({ latencyMs, vadDecisionLatencyMs, postVadLatencyMs }) => {
+        onLatency: ({
+          latencyMs,
+          vadDecisionLatencyMs,
+          postVadLatencyMs,
+          transcriptionLatencyMs,
+          modelFirstAudioLatencyMs
+        }) => {
           if (!Number.isFinite(latencyMs)) return;
           session.realtimeAgentLatenciesMs ??= [];
           session.realtimeAgentLatenciesMs.push(latencyMs);
@@ -1099,6 +1135,26 @@ agentWss.on("connection", (twilioSocket) => {
             session.realtimeAgentPostVadLatenciesMs.push(postVadLatencyMs);
             if (session.realtimeAgentPostVadLatenciesMs.length > 100) session.realtimeAgentPostVadLatenciesMs.shift();
           }
+          if (Number.isFinite(transcriptionLatencyMs)) {
+            session.realtimeAgentTranscriptionLatenciesMs ??= [];
+            session.realtimeAgentTranscriptionLatenciesMs.push(transcriptionLatencyMs);
+            if (session.realtimeAgentTranscriptionLatenciesMs.length > 100) {
+              session.realtimeAgentTranscriptionLatenciesMs.shift();
+            }
+          }
+          if (Number.isFinite(modelFirstAudioLatencyMs)) {
+            session.realtimeAgentModelFirstAudioLatenciesMs ??= [];
+            session.realtimeAgentModelFirstAudioLatenciesMs.push(modelFirstAudioLatencyMs);
+            if (session.realtimeAgentModelFirstAudioLatenciesMs.length > 100) {
+              session.realtimeAgentModelFirstAudioLatenciesMs.shift();
+            }
+          }
+        },
+        onToolLatency: ({ latencyMs }) => {
+          if (!Number.isFinite(latencyMs)) return;
+          session.realtimeAgentToolLatenciesMs ??= [];
+          session.realtimeAgentToolLatenciesMs.push(latencyMs);
+          if (session.realtimeAgentToolLatenciesMs.length > 100) session.realtimeAgentToolLatenciesMs.shift();
         },
         onSpeechStarted: () => {
           session.lastClientSpeakingAt = Date.now();
@@ -1147,7 +1203,9 @@ agentWss.on("connection", (twilioSocket) => {
         storePhoneSettingId: session.storePhoneSettingId,
         model: realtimeAgentModel,
         voice: realtimeAgentVoice,
-        transcriptionModel: realtimeAgentTranscriptionModel
+        transcriptionModel: realtimeAgentTranscriptionModel,
+        reasoningEffort: realtimeAgentReasoningEffort,
+        preambleAudioEnabled: realtimeAgentPreambleAudioEnabled
       });
       scheduleRealtimeAgentNoPromptWatchdog(session, bridge);
       bridge.startGreeting();
@@ -1165,7 +1223,10 @@ agentWss.on("connection", (twilioSocket) => {
     const latencySummary = {
       endToFirstAudio: summarizeRealtimeAgentLatencies(session.realtimeAgentLatenciesMs, 1500),
       vadDecision: summarizeRealtimeAgentLatencies(session.realtimeAgentVadDecisionLatenciesMs),
-      postVadToFirstAudio: summarizeRealtimeAgentLatencies(session.realtimeAgentPostVadLatenciesMs)
+      postVadToFirstAudio: summarizeRealtimeAgentLatencies(session.realtimeAgentPostVadLatenciesMs),
+      transcription: summarizeRealtimeAgentLatencies(session.realtimeAgentTranscriptionLatenciesMs),
+      modelFirstAudio: summarizeRealtimeAgentLatencies(session.realtimeAgentModelFirstAudioLatenciesMs),
+      toolExecution: summarizeRealtimeAgentLatencies(session.realtimeAgentToolLatenciesMs, 1200)
     };
     logRelay("openai_realtime_agent_latency_summary", { callSid: session.callSid, ...latencySummary });
     logRelay("openai_realtime_agent_closed", { callSid: session.callSid, latencySummary });
@@ -2363,7 +2424,13 @@ function extractExplicitClockExcludingRelativeHour(rawText) {
 }
 
 function roundRelativeHourOffsetToReceptionSlot(hours) {
-  const target = new Date(Date.now() + hours * 60 * 60 * 1000);
+  return roundRelativeHourOffsetToReceptionSlotAt(hours, new Date());
+}
+
+function roundRelativeHourOffsetToReceptionSlotAt(hours, referenceAt) {
+  const reference = referenceAt instanceof Date ? referenceAt : new Date(referenceAt);
+  if (Number.isNaN(reference.getTime())) return new Date(Number.NaN);
+  const target = new Date(reference.getTime() + hours * 60 * 60 * 1000);
   const parts = getJstDateTimeParts(target);
   if (parts.minute <= 10) {
     parts.minute = 0;
@@ -8083,6 +8150,11 @@ function normalizeRealtimeVadEagerness(value) {
   return ["low", "medium", "high", "auto"].includes(normalized) ? normalized : "medium";
 }
 
+function normalizeRealtimeReasoningEffort(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return ["minimal", "low", "medium", "high"].includes(normalized) ? normalized : "low";
+}
+
 function normalizeSpeechRate(value) {
   const text = String(value ?? "").trim();
   const match = text.match(/^(\d{2,3})(?:\s*%)?$/);
@@ -8701,6 +8773,19 @@ function systemPrompt() {
   ].join("\n");
 }
 
+function japanDateTimeLabel(value = new Date()) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).format(new Date(value));
+}
+
 function createRealtimeAgentState() {
   return {
     userSpeechSequence: 0,
@@ -8717,6 +8802,8 @@ function createRealtimeAgentState() {
     confirmationPreparedAtUserSpeechSequence: -1,
     confirmationSpoken: false,
     confirmationSpokenAtUserSpeechSequence: -1,
+    lastAcceptedTurnKey: undefined,
+    lastAcceptedTurnAt: 0,
     toolCallCount: 0
   };
 }
@@ -8763,8 +8850,8 @@ function buildRealtimeAgentInstructions(session) {
     "相づち、接続確認、聞き返し、雑音らしい短い発話を、日時、コース、氏名、来店歴として解釈してはいけません。『聞こえていますか』にはまず直接答え、予約内容を変更しません。",
     "",
     "# 発話とツール",
-    "commentaryフェーズは内部処理専用です。利用者向け音声はfinal_answerフェーズだけに出してください。",
-    "ツールを呼ぶ時は内部推論を話しません。DB確認などで利用者を待たせる可能性がある場合だけ、『確認しますね』程度の短い受領応答を一度だけ返してからツールを呼べます。長い進捗説明はしません。",
+    "commentaryフェーズは、DBや店舗情報を確認するツールの直前に、短い受領応答を一度だけ話すために使います。内部推論や長い進捗説明は話しません。final_answerでは結果だけを自然に返します。",
+    "時間がかかる可能性のある確認ツールを呼ぶ時は無言で待たせず、『確認しますね』程度の一文だけを先に話します。ただし同じ受領応答を繰り返したり、確認済みの氏名や電話番号を再質問したりしません。",
     "ツール出力は読み上げ原稿ではなく、事実、制約、許可された次の行動です。結果を理解したうえで、会話に合う自然な応答、質問、別ツールの実行をあなた自身で選んでください。",
     "保持情報に自信がなければget_reception_stateを使い、店舗固有の質問で本文が必要ならsearch_store_knowledgeを使います。検索結果がない内容は推測せず、未確認であることを正直に伝えます。",
     "ツール名、内部トークン、JSON、システム、プロンプト、処理手順を利用者へ話してはいけません。",
@@ -8777,10 +8864,12 @@ function buildRealtimeAgentInstructions(session) {
     "# 予約と副作用の絶対ルール",
     "- 空きがあるとは推測しません。日時、コース時間、指名条件が分かった時だけcheck_availabilityを使います。最短希望ならfind_next_availabilityを使います。",
     "- check_availabilityへ渡す日時とコースは、利用者が明示した内容、または一候補だけの復唱に利用者が同意した内容に限ります。近い登録コースや都合のよい時刻へ置き換えません。",
+    "- 『1時間後』『2時間後』など時間単位の相対時刻は、下記の通話開始時刻を基準に日本時間で計算します。現在時刻が分からないとは答えず、計算した一候補を復唱して同意を得てから空きを確認します。",
     "- AVAILABLEになる前は、氏名や電話番号などの個人情報を求めたり記録したりしません。",
     "- AVAILABLE後は、利用者が自然に話した情報をrecord_booking_detailsへ記録します。不足項目は会話に合う順で確認でき、利用者が複数まとめて話した場合はまとめて記録できます。",
     "- record_booking_detailsのcollection_stateで取得済みになった項目は、訂正が明示されない限り再質問しません。古い項目を次のツール引数へ繰り返し含めず、まだ不足している一項目だけを尋ねてください。",
     "- 利用者が明確に名乗った氏名は一度で記録し、同じ氏名を確認のためだけに何度も言わせません。ツールが一部だけ受理した場合も、rejected_fieldsだけを解決し、updated_fieldsやdo_not_repeat_collected_fieldsを再質問しません。",
+    "- ツール結果のresponse_policy.do_not_echo_collected_fieldsがtrueなら、取得済みの氏名や電話番号を『確認できました』と読み直してはいけません。短く受け止め、まだ不足している一項目へ自然に進んでください。",
     callerLast4
       ? `- SMS送信先に発信元番号を使う時は、下4桁${callerLast4}を含めるなどして送信先を明示し、利用者の明確な同意後だけuse_caller_numberを使います。`
       : "- SMS送信先の電話番号は利用者が明示した番号だけを記録します。",
@@ -8803,6 +8892,7 @@ function buildRealtimeAgentInstructions(session) {
     "日本語だけで、電話口で聞き取りやすく話します。英語風の挨拶、翻訳調、長い箇条書き、機械的な定型句の連続を避けます。",
     "必要な説明は十分に行いますが、予約を急かしたり、会話を不自然に打ち切ったりしません。利用者の発話が始まったら止まり、割り込み内容へ応答します。",
     "",
+    "通話開始時刻（日本時間）: " + japanDateTimeLabel(session.setupAt || Date.now()),
     "現在日付: " + japanDateLabel(),
     "店舗情報:",
     formatStoreContextForPrompt(session.storeContext, { factsOnly: true })
@@ -9183,6 +9273,23 @@ function classifyRealtimeAgentCustomerTurn(session, transcript, metadata = {}) {
       instructions: "直前の発話は認識信頼度が低いです。内容を補完せず、利用者の言葉を決めつけない短い聞き返しを一度だけ行ってください。予約情報は更新しないでください。"
     };
   }
+  const state = session.realtimeAgentState ?? createRealtimeAgentState();
+  session.realtimeAgentState = state;
+  const turnKey = buildRealtimeAgentDuplicateTurnKey(session, text);
+  const receivedAt = Number.isFinite(Number(metadata.receivedAt)) ? Number(metadata.receivedAt) : Date.now();
+  if (
+    turnKey &&
+    state.lastAcceptedTurnKey === turnKey &&
+    receivedAt - Number(state.lastAcceptedTurnAt || 0) >= 0 &&
+    receivedAt - Number(state.lastAcceptedTurnAt || 0) <= realtimeAgentDuplicateTurnWindowMs
+  ) {
+    state.lastUserTranscriptSpeechSequence = state.userSpeechSequence;
+    return { ignore: true, reason: "duplicate_turn_during_response_wait" };
+  }
+  if (turnKey) {
+    state.lastAcceptedTurnKey = turnKey;
+    state.lastAcceptedTurnAt = receivedAt;
+  }
   if (isRealtimeBareAffirmative(text) && realtimeAssistantContainsMultipleChoice(session.lastAssistantText)) {
     return {
       forceRespond: true,
@@ -9200,6 +9307,41 @@ function classifyRealtimeAgentCustomerTurn(session, transcript, metadata = {}) {
     };
   }
   return { forceRespond: true, reason: "normal_turn" };
+}
+
+function buildRealtimeAgentDuplicateTurnKey(session, transcript) {
+  const customer = normalizeRealtimeAgentDuplicateText(transcript);
+  if (!customer) return "";
+  const state = session.realtimeAgentState ?? createRealtimeAgentState();
+  const assistant = normalizeRealtimeAgentDuplicateText(session.lastAssistantText).slice(-180);
+  if (isExplicitCallerNumberAuthorization(transcript)) {
+    return `caller-number:${state.callerPhonePromptSpeechSequence}:authorized`;
+  }
+  if (
+    state.firstVisitPromptSpeechSequence >= 0 &&
+    state.userSpeechSequence > state.firstVisitPromptSpeechSequence &&
+    extractFirstVisitAnswer(transcript) !== undefined
+  ) {
+    return `first-visit:${state.firstVisitPromptSpeechSequence}:${extractFirstVisitAnswer(transcript)}`;
+  }
+  if (
+    state.attentionPromptSpeechSequence >= 0 &&
+    state.userSpeechSequence > state.attentionPromptSpeechSequence &&
+    (isExplicitAttentionConfirmation(transcript) || isAttentionConfirmationAnswer(transcript))
+  ) {
+    return `attention:${state.attentionPromptSpeechSequence}:confirmed`;
+  }
+  if (state.confirmationSpoken && isRealtimeBareAffirmative(transcript)) {
+    return `final-confirmation:${state.confirmationToken ?? "none"}:${customer}`;
+  }
+  return `${assistant || "no-assistant-context"}:${customer}`;
+}
+
+function normalizeRealtimeAgentDuplicateText(value) {
+  return normalizeJapaneseSpeech(value)
+    .replace(/[\s。、！？!?.,・「」『』（）()]/gu, "")
+    .replace(/ー+/gu, "ー")
+    .slice(0, 240);
 }
 
 function guardRealtimeAgentToolInput(session, name) {
@@ -9244,9 +9386,14 @@ function validateRealtimeAgentAvailabilityEvidence(session, startsAt, course) {
   const latestDateEvidence = getRealtimeAgentLatestFieldEvidence(session, realtimeTextContainsDateEvidence);
   const latestTimeEvidence = getRealtimeAgentLatestFieldEvidence(session, realtimeTextContainsTimeEvidence);
   const latestCourseEvidence = getRealtimeAgentLatestFieldEvidence(session, realtimeTextContainsCourseEvidence);
-  const dateSupported = realtimeTextSupportsDate(latestDateEvidence, startsAt) ||
+  const relativeDateTimeSupported = realtimeTextSupportsRelativeHour(
+    latestTimeEvidence,
+    startsAt,
+    new Date(session.setupAt || session.connectedAt || Date.now())
+  );
+  const dateSupported = relativeDateTimeSupported || realtimeTextSupportsDate(latestDateEvidence, startsAt) ||
     (singleCandidateConfirmation && realtimeTextSupportsDate(assistantText, startsAt));
-  const timeSupported = realtimeTextSupportsTime(latestTimeEvidence, startsAt) ||
+  const timeSupported = relativeDateTimeSupported || realtimeTextSupportsTime(latestTimeEvidence, startsAt) ||
     (singleCandidateConfirmation && realtimeTextSupportsTime(assistantText, startsAt));
   if (!dateSupported || !timeSupported) {
     return {
@@ -9360,7 +9507,8 @@ function realtimeTextContainsDateEvidence(value) {
 
 function realtimeTextContainsTimeEvidence(value) {
   const text = normalizeDateTimeDigits(normalizeJapaneseSpeech(value));
-  return /(?:[0-2]?\d\s*(?:時|:|：)|正午|午前|午後|深夜|夜中|明け方)/u.test(text);
+  return Boolean(parseRelativeHourOffset(text)) ||
+    /(?:[0-2]?\d\s*(?:時|:|：)|正午|午前|午後|深夜|夜中|明け方)/u.test(text);
 }
 
 function realtimeTextContainsCourseEvidence(value) {
@@ -9399,6 +9547,14 @@ function realtimeTextSupportsTime(value, startsAt) {
     return new RegExp(`(?:午後|昼|夕方|夜)${hour12}時`, "u").test(text);
   }
   return false;
+}
+
+function realtimeTextSupportsRelativeHour(value, startsAt, referenceAt) {
+  if (!(startsAt instanceof Date) || Number.isNaN(startsAt.getTime())) return false;
+  const parsed = parseRelativeHourOffset(value);
+  if (!parsed) return false;
+  const expected = roundRelativeHourOffsetToReceptionSlotAt(parsed.hours, referenceAt);
+  return !Number.isNaN(expected.getTime()) && expected.getTime() === startsAt.getTime();
 }
 
 function realtimeTextSupportsCourse(value, course) {
@@ -9867,6 +10023,10 @@ function recordRealtimeAgentBookingDetails(session, args) {
     do_not_repeat_collected_fields: Object.entries(collectionState)
       .filter(([key, value]) => key.endsWith("_collected") && value === true)
       .map(([key]) => key.replace(/_collected$/, "")),
+    response_policy: {
+      do_not_echo_collected_fields: true,
+      ask_one_missing_field_only: true
+    },
     ready_for_final_confirmation: missingFields.length === 0,
     allowed_actions: getRealtimeAgentAllowedActions(draft)
   };
