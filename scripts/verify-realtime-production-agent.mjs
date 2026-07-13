@@ -25,7 +25,7 @@ if (
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 6 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 7 ||
   health?.realtimeAgent?.manualTurnControlReady !== true ||
   health?.realtimeAgent?.automaticVadResponseDisabled !== true ||
   health?.realtimeAgent?.automaticVadInterruptDisabled !== true ||
@@ -36,6 +36,10 @@ if (
   health?.realtimeAgent?.transcriptionWatchdogReady !== true ||
   health?.realtimeAgent?.latencyTelemetryReady !== true ||
   health?.realtimeAgent?.latencySummaryReady !== true ||
+  health?.realtimeAgent?.latencyPersistenceReady !== true ||
+  health?.realtimeAgent?.nonBlockingConversationPersistenceReady !== true ||
+  health?.realtimeAgent?.partialBookingDetailsReady !== true ||
+  health?.realtimeAgent?.idempotentCollectedFieldsReady !== true ||
   health?.realtimeAgent?.availabilityEvidenceGateReady !== true ||
   health?.realtimeAgent?.finalConfirmationPriceRoomReady !== true ||
   health?.realtimeAgent?.assignmentConsistencyGateReady !== true ||
@@ -163,6 +167,10 @@ const report = {
   transcriptionWatchdogReady: health.realtimeAgent.transcriptionWatchdogReady,
   latencyTelemetryReady: health.realtimeAgent.latencyTelemetryReady,
   latencySummaryReady: health.realtimeAgent.latencySummaryReady,
+  latencyPersistenceReady: health.realtimeAgent.latencyPersistenceReady,
+  nonBlockingConversationPersistenceReady: health.realtimeAgent.nonBlockingConversationPersistenceReady,
+  partialBookingDetailsReady: health.realtimeAgent.partialBookingDetailsReady,
+  idempotentCollectedFieldsReady: health.realtimeAgent.idempotentCollectedFieldsReady,
   availabilityEvidenceGateReady: health.realtimeAgent.availabilityEvidenceGateReady,
   finalConfirmationPriceRoomReady: health.realtimeAgent.finalConfirmationPriceRoomReady,
   assignmentConsistencyGateReady: health.realtimeAgent.assignmentConsistencyGateReady,

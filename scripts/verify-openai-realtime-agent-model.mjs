@@ -366,6 +366,13 @@ if ((boundaryResponse?.output ?? []).some((item) => ["check_availability", "reco
 
 boundarySocket.close(1000, "verification complete");
 
+const combinedIdentityScenario = await verifyCombinedIdentityScenario({
+  apiKey,
+  model,
+  voice,
+  storeContext: session.storeContext
+});
+
 console.log(JSON.stringify({
   ok: true,
   model,
@@ -384,6 +391,8 @@ console.log(JSON.stringify({
     explicitCorrectionPersisted: true,
     availabilityRecheckedAfterDateChange: true,
     prohibitedServiceBoundaryHeld: true,
+    combinedNameAndCallerNumberRecordedOnce: true,
+    collectedIdentityNotAskedAgain: true,
     structuredFinalConfirmationSpoken: true,
     noHoldBeforePostSummaryConsent: true,
     holdCreatedOnlyAfterExplicitConsent: true,
@@ -393,9 +402,168 @@ console.log(JSON.stringify({
     autonomousFollowUp,
     sideTopicReply,
     boundaryReply,
+    nextIdentityFollowUp: combinedIdentityScenario.nextFollowUp,
     confirmationReply
   }
 }, null, 2));
+
+async function verifyCombinedIdentityScenario({ apiKey: key, model: modelName, voice: voiceName, storeContext }) {
+  const identitySession = createPhoneSession();
+  identitySession.from = "+818037884404";
+  identitySession.storeContext = storeContext;
+  const identitySocket = new WebSocket(`wss://api.openai.com/v1/realtime?model=${encodeURIComponent(modelName)}`, {
+    headers: { Authorization: `Bearer ${key}` }
+  });
+  const identityEvents = createEventQueue(identitySocket);
+
+  try {
+    await waitForOpen(identitySocket);
+    await updateSessionAndWait(identitySocket, identityEvents, {
+      type: "realtime",
+      model: modelName,
+      output_modalities: ["audio"],
+      instructions: buildRealtimeAgentInstructions(identitySession),
+      tools: buildRealtimeAgentTools(),
+      tool_choice: "auto",
+      audio: {
+        output: { format: { type: "audio/pcmu" }, voice: voiceName }
+      }
+    });
+
+    sendUserText(identitySocket, "明日の19時から90分、フリーで予約したいです");
+    let identityResponse = await createResponseAndWait(identitySocket, identityEvents);
+    const availabilityCall = findToolCall(identityResponse, "check_availability");
+    if (!availabilityCall) {
+      throw new Error(`Combined identity scenario did not check availability: ${extractTranscript(identityResponse) || "no tool call"}`);
+    }
+    const availabilityArgs = parseArguments(availabilityCall);
+    const availabilityToken = "verification-combined-identity-token";
+    sendToolOutput(identitySocket, availabilityCall.call_id, {
+      ok: true,
+      code: "AVAILABLE",
+      availability_token: availabilityToken,
+      slot: {
+        starts_at: availabilityArgs.starts_at,
+        course_name: "90分スタンダードコース",
+        course_duration_min: 90,
+        course_price_yen: 17000,
+        therapist_name: "あおい",
+        room_name: "Room B",
+        booking_type: "free"
+      },
+      collection_state: {
+        availability_checked: true,
+        customer_name_collected: false,
+        phone_collected: false,
+        first_visit_collected: false,
+        attention_confirmed: false,
+        ready_for_final_confirmation: false
+      },
+      allowed_actions: ["answer_related_questions", "record_booking_details", "continue_conversation"]
+    });
+    await continueUntilVisibleSpeech(identitySocket, identityEvents, await createResponseAndWait(identitySocket, identityEvents), {
+      availabilityToken,
+      allowedTools: ["get_reception_state", "record_booking_details"]
+    });
+
+    sendUserText(identitySocket, "佐藤です。電話番号は今かけている番号、下4桁4404で間違いないです");
+    identityResponse = await createResponseAndWait(identitySocket, identityEvents);
+    const recordCall = findToolCall(identityResponse, "record_booking_details");
+    if (!recordCall) {
+      throw new Error(`Model did not record combined name and caller number: ${extractTranscript(identityResponse) || "no tool call"}`);
+    }
+    const recordArgs = parseArguments(recordCall);
+    if (
+      recordArgs.availability_token !== availabilityToken ||
+      !String(recordArgs.customer_name ?? "").includes("佐藤") ||
+      recordArgs.use_caller_number !== true ||
+      recordArgs.caller_number_confirmed !== true
+    ) {
+      throw new Error(`Combined identity arguments were incorrect: ${recordCall.arguments}`);
+    }
+
+    sendToolOutput(identitySocket, recordCall.call_id, {
+      ok: true,
+      code: "DETAILS_RECORDED",
+      updated_fields: ["customer_name", "phone"],
+      unchanged_fields: [],
+      rejected_fields: [],
+      missing_fields: ["first_visit", "attention_confirmed"],
+      collection_state: {
+        availability_checked: true,
+        customer_name_collected: true,
+        phone_collected: true,
+        first_visit_collected: false,
+        attention_confirmed: false,
+        ready_for_final_confirmation: false
+      },
+      do_not_repeat_collected_fields: ["customer_name", "phone"],
+      ready_for_final_confirmation: false,
+      allowed_actions: ["answer_questions", "record_booking_details", "ask_about_any_missing_field"]
+    });
+    identityResponse = await continueAfterCollectedIdentity(
+      identitySocket,
+      identityEvents,
+      await createResponseAndWait(identitySocket, identityEvents),
+      availabilityToken
+    );
+    const nextFollowUp = extractUserVisibleTranscript(identityResponse);
+    if (!nextFollowUp) {
+      throw new Error(`Model did not continue after collecting identity: ${JSON.stringify(identityResponse?.output ?? [])}`);
+    }
+    if (
+      /(?:お名前|氏名).{0,20}(?:教えて|確認|名乗|よろしい)|(?:電話番号|下4桁).{0,24}(?:教えて|読み上げ|送ってよい|送ってもよい|許可|同意)/u.test(nextFollowUp)
+    ) {
+      throw new Error(`Model asked for already collected identity again: ${nextFollowUp}`);
+    }
+    return { nextFollowUp };
+  } finally {
+    identitySocket.close(1000, "combined identity verification complete");
+  }
+}
+
+async function continueAfterCollectedIdentity(ws, queue, initialResponse, availabilityToken) {
+  let current = initialResponse;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (extractUserVisibleTranscript(current)) return current;
+    const calls = (current?.output ?? []).filter((item) => item?.type === "function_call");
+    if (!calls.length) return current;
+    for (const call of calls) {
+      const args = parseArguments(call);
+      if (call.name === "record_booking_details") {
+        if (args.customer_name !== undefined || args.phone !== undefined || args.use_caller_number !== undefined) {
+          throw new Error(`Model resent already collected identity fields: ${call.arguments}`);
+        }
+      } else if (call.name !== "get_reception_state") {
+        throw new Error(`Model called an unexpected tool after identity collection: ${call.name}`);
+      }
+      sendToolOutput(ws, call.call_id, {
+        ok: true,
+        code: "STATE_READY",
+        state: {
+          availability_checked: true,
+          customer_name: "佐藤",
+          phone_last4: "4404",
+          first_visit: null,
+          attention_confirmed: false,
+          ready_for_final_confirmation: false
+        },
+        collection_state: {
+          availability_checked: true,
+          customer_name_collected: true,
+          phone_collected: true,
+          first_visit_collected: false,
+          attention_confirmed: false,
+          ready_for_final_confirmation: false
+        },
+        do_not_repeat_collected_fields: ["customer_name", "phone"],
+        allowed_actions: ["answer_questions", "record_booking_details", "ask_about_any_missing_field"]
+      });
+    }
+    current = await createResponseAndWait(ws, queue);
+  }
+  return current;
+}
 
 async function continueUntilVisibleSpeech(ws, queue, initialResponse, options) {
   let current = initialResponse;

@@ -14,6 +14,8 @@ const {
   createPhoneSession,
   createRealtimeAgentReservationHold,
   createRealtimeAgentState,
+  enqueuePhonePersistence,
+  flushPhonePersistence,
   getRealtimeAgentReceptionState,
   guardRealtimeAgentToolInput,
   isRealtimeAgentCircuitOpen,
@@ -208,6 +210,92 @@ assert.deepEqual(latencySummary, {
   targetRate: 0.6
 });
 
+const identitySession = createIdentityTestSession();
+identitySession.realtimeAgentState.userSpeechSequence = 1;
+identitySession.realtimeAgentState.lastUserTranscript = "\u4f50\u85e4\u3067\u3059\u3002\u96fb\u8a71\u756a\u53f7\u306f\u4eca\u304b\u3051\u3066\u308b\u3084\u3064\u3001\u672b\u5c3e4404\u3067\u9593\u9055\u3044\u306a\u3044\u3067\u3059\u3002";
+identitySession.realtimeAgentState.lastUserTranscriptSpeechSequence = 1;
+result = recordRealtimeAgentBookingDetails(identitySession, {
+  availability_token: "identity-availability-token",
+  customer_name: "\u4f50\u85e4",
+  use_caller_number: true,
+  caller_number_confirmed: true
+});
+assert.equal(result.ok, true);
+assert.equal(identitySession.reservationDraft.customerName, "\u4f50\u85e4");
+assert.equal(identitySession.reservationDraft.phone, "080-3788-4404");
+assert.deepEqual(result.rejected_fields, []);
+assert.ok(result.do_not_repeat_collected_fields.includes("customer_name"));
+assert.ok(result.do_not_repeat_collected_fields.includes("phone"));
+
+identitySession.realtimeAgentState.userSpeechSequence = 2;
+identitySession.realtimeAgentState.lastUserTranscript = "\u5927\u4e08\u592b\u3067\u3059\u3002";
+identitySession.realtimeAgentState.lastUserTranscriptSpeechSequence = 2;
+result = recordRealtimeAgentBookingDetails(identitySession, {
+  availability_token: "identity-availability-token",
+  customer_name: "\u4f50\u85e4",
+  use_caller_number: true,
+  caller_number_confirmed: true
+});
+assert.equal(result.ok, true);
+assert.equal(result.code, "DETAILS_RECORDED");
+assert.ok(result.unchanged_fields.includes("customer_name"));
+assert.ok(result.unchanged_fields.includes("phone"));
+assert.deepEqual(result.rejected_fields, []);
+
+const partialIdentitySession = createIdentityTestSession();
+partialIdentitySession.realtimeAgentState.userSpeechSequence = 1;
+partialIdentitySession.realtimeAgentState.lastUserTranscript = "\u4f50\u85e4\u3067\u3059\u3002\u4eca\u304b\u3051\u3066\u3044\u308b\u756a\u53f7\u3067\u3059\u3002";
+partialIdentitySession.realtimeAgentState.lastUserTranscriptSpeechSequence = 1;
+result = recordRealtimeAgentBookingDetails(partialIdentitySession, {
+  availability_token: "identity-availability-token",
+  customer_name: "\u4f50\u85e4",
+  use_caller_number: true,
+  caller_number_confirmed: true
+});
+assert.equal(result.ok, true);
+assert.equal(result.code, "DETAILS_PARTIALLY_RECORDED");
+assert.equal(partialIdentitySession.reservationDraft.customerName, "\u4f50\u85e4");
+assert.equal(partialIdentitySession.reservationDraft.phone, undefined);
+assert.deepEqual(result.updated_fields, ["customer_name"]);
+assert.equal(result.rejected_fields[0].field, "phone");
+
+markRealtimeAgentAssistantEvidence(partialIdentitySession, "\u4eca\u304b\u3051\u3066\u3044\u308b\u96fb\u8a71\u756a\u53f7\u306bSMS\u3092\u9001\u3063\u3066\u3088\u308d\u3057\u3044\u3067\u3059\u304b\uff1f");
+partialIdentitySession.realtimeAgentState.userSpeechSequence = 2;
+partialIdentitySession.realtimeAgentState.lastUserTranscript = "\u5927\u4e08\u592b\u3067\u3059\u3002";
+partialIdentitySession.realtimeAgentState.lastUserTranscriptSpeechSequence = 2;
+result = recordRealtimeAgentBookingDetails(partialIdentitySession, {
+  availability_token: "identity-availability-token",
+  customer_name: "\u4f50\u85e4",
+  use_caller_number: true,
+  caller_number_confirmed: true
+});
+assert.equal(result.ok, true);
+assert.equal(partialIdentitySession.reservationDraft.customerName, "\u4f50\u85e4");
+assert.equal(partialIdentitySession.reservationDraft.phone, "080-3788-4404");
+assert.ok(result.unchanged_fields.includes("customer_name"));
+assert.ok(result.updated_fields.includes("phone"));
+assert.deepEqual(result.rejected_fields, []);
+
+const persistenceSession = createPhoneSession();
+const persistenceOrder = [];
+let releaseFirstPersistence;
+const firstPersistenceGate = new Promise((resolve) => {
+  releaseFirstPersistence = resolve;
+});
+enqueuePhonePersistence(persistenceSession, "first", async () => {
+  persistenceOrder.push("first:start");
+  await firstPersistenceGate;
+  persistenceOrder.push("first:end");
+});
+enqueuePhonePersistence(persistenceSession, "second", async () => {
+  persistenceOrder.push("second");
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.deepEqual(persistenceOrder, ["first:start"]);
+releaseFirstPersistence();
+await flushPhonePersistence(persistenceSession);
+assert.deepEqual(persistenceOrder, ["first:start", "first:end", "second"]);
+
 const state = getRealtimeAgentReceptionState(session);
 assert.equal(state.collection_state.ready_for_final_confirmation, true);
 assert.equal(state.state.phone_collected, true);
@@ -364,7 +452,35 @@ evidenceSession.conversationTurns = [{
 result = validateRealtimeAgentAvailabilityEvidence(evidenceSession, correctedStart, course60);
 assert.equal(result.code, "COURSE_EVIDENCE_REQUIRED");
 
-console.log(JSON.stringify({ ok: true, checks: 112 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 139 }, null, 2));
+
+function createIdentityTestSession() {
+  const value = createPhoneSession();
+  value.from = "+818037884404";
+  value.storeId = "store-test";
+  value.storeContext = session.storeContext;
+  value.realtimeAgentState = createRealtimeAgentState();
+  value.reservationDraft.startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  value.reservationDraft.course = session.storeContext.courses[0];
+  value.reservationDraft.availableCourses = session.storeContext.courses;
+  value.reservationDraft.nominationIntent = false;
+  value.reservationDraft.therapistName = "\u307f\u3055\u304d";
+  value.reservationDraft.selected_therapist_source = "ai_assigned_after_availability";
+  value.reservationDraft.assignedTherapistId = "therapist-1";
+  value.reservationDraft.assignedTherapistName = "\u307f\u3055\u304d";
+  value.reservationDraft.assignedRoomId = "room-1";
+  value.reservationDraft.assignedRoomName = "Room A";
+  value.reservationDraft.availabilityCheckResult = {
+    ok: true,
+    reason: "OK",
+    selectedTherapistId: "therapist-1",
+    selectedRoomId: "room-1"
+  };
+  value.reservationDraft.callerPhoneCandidate = "080-3788-4404";
+  value.realtimeAgentState.availabilityToken = "identity-availability-token";
+  value.realtimeAgentState.availabilityKey = buildRealtimeAgentAvailabilityKey(value.reservationDraft);
+  return value;
+}
 
 function assertNoScriptedSpeechFields(value) {
   const forbidden = new Set(["next_question", "message_for_customer", "spoken_summary", "spoken_reply"]);

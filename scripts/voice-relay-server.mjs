@@ -371,7 +371,7 @@ const server = http.createServer(async (request, response) => {
           vadEagerness: realtimeAgentVadEagerness,
           responseWatchdogMs: realtimeAgentResponseWatchdogMs,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 6,
+          conversationFlowVersion: 7,
           scriptedReplyPrimary: false,
           manualTurnControlReady: realtimeAgentManualTurnControl,
           automaticVadResponseDisabled: realtimeAgentManualTurnControl,
@@ -383,6 +383,10 @@ const server = http.createServer(async (request, response) => {
           transcriptionWatchdogReady: true,
           latencyTelemetryReady: true,
           latencySummaryReady: true,
+          latencyPersistenceReady: true,
+          nonBlockingConversationPersistenceReady: true,
+          partialBookingDetailsReady: true,
+          idempotentCollectedFieldsReady: true,
           availabilityEvidenceGateReady: true,
           finalConfirmationPriceRoomReady: true,
           assignmentConsistencyGateReady: true,
@@ -607,6 +611,7 @@ function createPhoneSession() {
     conversationTurns: [],
     statePromptAttempts: {},
     persistenceErrors: [],
+    persistenceQueue: Promise.resolve(),
     openai: undefined,
     publicBaseUrl: undefined,
     pendingText: "",
@@ -1021,13 +1026,15 @@ agentWss.on("connection", (twilioSocket) => {
       }
 
       session.storeContext = await loadStoreReceptionContext(session.storeId);
-      await ensurePhoneConversation(session);
       session.setupAt = Date.now();
       if (session.callSid) {
         activeSessions.set(session.callSid, session);
         activeAgentSessions.set(session.callSid, session);
       }
-      await upsertCallLog(session, "RECEIVED");
+      enqueuePhonePersistence(session, "realtime_agent_setup", async () => {
+        await ensurePhoneConversation(session);
+        await upsertCallLog(session, "RECEIVED");
+      });
 
       const bridge = new OpenAiRealtimeAgentBridge({
         twilioSocket,
@@ -1054,18 +1061,22 @@ agentWss.on("connection", (twilioSocket) => {
           session.realtimeAgentState.lastUserTranscriptSpeechSequence = session.realtimeAgentState.userSpeechSequence;
           clearRealtimeAgentNoPromptWatchdog(session);
           pushCustomerTranscript(session, transcript);
-          await appendPhoneConversationMessage(session, "CUSTOMER", transcript);
-          await upsertCallLog(session, "TRANSCRIBED");
           const decision = classifyRealtimeAgentCustomerTurn(session, transcript, metadata);
           session.lastRealtimeAgentTurnDecision = decision;
+          enqueuePhonePersistence(session, "realtime_customer_turn", async () => {
+            await appendPhoneConversationMessage(session, "CUSTOMER", transcript);
+            await upsertCallLog(session, "TRANSCRIBED");
+          });
           return decision;
         },
         onAssistantTranscript: async (transcript) => {
           session.lastAssistantText = transcript;
           markRealtimeAgentAssistantEvidence(session, transcript);
           pushAssistantTranscript(session, transcript);
-          await appendPhoneConversationMessage(session, "AI", transcript);
-          await upsertCallLog(session, "TRANSCRIBED");
+          enqueuePhonePersistence(session, "realtime_assistant_turn", async () => {
+            await appendPhoneConversationMessage(session, "AI", transcript);
+            await upsertCallLog(session, "TRANSCRIBED");
+          });
         },
         onToolCall: async ({ name, arguments: args, callId }) => {
           return handleRealtimeAgentTool(session, name, args, callId);
@@ -1160,8 +1171,10 @@ agentWss.on("connection", (twilioSocket) => {
     logRelay("openai_realtime_agent_closed", { callSid: session.callSid, latencySummary });
     clearRealtimeAgentNoPromptWatchdog(session);
     session.agentBridge?.close();
+    await flushPhonePersistence(session);
     const finalCallLogState = buildFinalCallLogState(session);
     await upsertCallLog(session, finalCallLogState.status, finalCallLogState.reviewNotes);
+    await persistRealtimeAgentLatencySummary(session, latencySummary);
     await recordVoiceUsageMeter(session, "openai_realtime_agent");
     if (session.callSid) {
       activeSessions.delete(session.callSid);
@@ -5062,6 +5075,46 @@ async function appendPhoneConversationMessage(session, role, content) {
     .catch((error) => recordPersistenceError(session, "conversation_update", error));
 }
 
+function enqueuePhonePersistence(session, stage, operation) {
+  if (!session || typeof operation !== "function") return Promise.resolve();
+  const previous = session.persistenceQueue ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(operation)
+    .catch((error) => recordPersistenceError(session, stage, error));
+  session.persistenceQueue = next;
+  return next;
+}
+
+async function flushPhonePersistence(session) {
+  if (!session?.persistenceQueue) return;
+  await session.persistenceQueue.catch((error) => recordPersistenceError(session, "persistence_flush", error));
+}
+
+async function persistRealtimeAgentLatencySummary(session, latencySummary) {
+  if (isRegressionCall(session) || !process.env.DATABASE_URL || !session?.storeId || !session?.callSid) return;
+  await prisma.auditLog
+    .create({
+      data: {
+        storeId: session.storeId,
+        actorType: "SYSTEM",
+        actorId: session.callSid,
+        action: "PHONE_REALTIME_LATENCY_SUMMARY",
+        after: {
+          callSid: session.callSid,
+          reservationId: session.reservationId ?? null,
+          ...latencySummary
+        }
+      }
+    })
+    .catch((error) => {
+      logRelay("openai_realtime_agent_latency_persistence_failed", {
+        callSid: session.callSid,
+        reason: sanitizeOperationalError(error)
+      });
+    });
+}
+
 function recordPersistenceError(session, stage, error) {
   const reason = sanitizeOperationalError(error);
   session.persistenceErrors ??= [];
@@ -8726,9 +8779,14 @@ function buildRealtimeAgentInstructions(session) {
     "- check_availabilityへ渡す日時とコースは、利用者が明示した内容、または一候補だけの復唱に利用者が同意した内容に限ります。近い登録コースや都合のよい時刻へ置き換えません。",
     "- AVAILABLEになる前は、氏名や電話番号などの個人情報を求めたり記録したりしません。",
     "- AVAILABLE後は、利用者が自然に話した情報をrecord_booking_detailsへ記録します。不足項目は会話に合う順で確認でき、利用者が複数まとめて話した場合はまとめて記録できます。",
+    "- record_booking_detailsのcollection_stateで取得済みになった項目は、訂正が明示されない限り再質問しません。古い項目を次のツール引数へ繰り返し含めず、まだ不足している一項目だけを尋ねてください。",
+    "- 利用者が明確に名乗った氏名は一度で記録し、同じ氏名を確認のためだけに何度も言わせません。ツールが一部だけ受理した場合も、rejected_fieldsだけを解決し、updated_fieldsやdo_not_repeat_collected_fieldsを再質問しません。",
     callerLast4
       ? `- SMS送信先に発信元番号を使う時は、下4桁${callerLast4}を含めるなどして送信先を明示し、利用者の明確な同意後だけuse_caller_numberを使います。`
       : "- SMS送信先の電話番号は利用者が明示した番号だけを記録します。",
+    callerLast4
+      ? "- 発信元番号はシステムが取得済みです。利用者が『今かけている番号で大丈夫』『その番号で間違いない』などと自然に明示したら、その許可を一度で記録し、電話番号全桁を改めて読ませません。"
+      : "- 電話番号は一度正しく記録できたら、明示的な訂正がない限り再質問しません。",
     "- 初回か再来か、注意事項への同意、電話番号利用は、利用者の明示発言だけを記録します。単なる相づちから推測しません。",
     "- 必須情報が揃ったらprepare_final_confirmationを使います。返されたconfirmationの日時、コース、合計料金、担当、部屋、氏名、電話番号下4桁、初回/再来、仮予約であることを、会話に合う自然な言葉で漏れなく要約し、明確な同意を待ちます。",
     "- create_reservation_holdは、その要約を利用者へ話した後に明確な同意を得た場合だけ使います。訂正や曖昧な返答では使いません。",
@@ -8811,7 +8869,7 @@ function buildRealtimeAgentTools() {
     {
       type: "function",
       name: "record_booking_details",
-      description: "空き確認後に、利用者が明示した予約情報だけをサーバーへ記録する。複数項目を同時に記録できる。未取得項目は省略する。質問文は返さない。",
+      description: "空き確認後に、利用者が明示した予約情報だけをサーバーへ記録する。複数項目を同時に記録できる。未取得項目と過去ターンで記録済みの項目は省略する。質問文は返さない。",
       parameters: {
         type: "object",
         properties: {
@@ -9692,24 +9750,81 @@ function recordRealtimeAgentBookingDetails(session, args) {
   if (tokenError) return tokenError;
   const transcriptMatchesCurrentSpeech = state.lastUserTranscriptSpeechSequence === state.userSpeechSequence;
   const currentTranscript = transcriptMatchesCurrentSpeech ? state.lastUserTranscript : "";
+  let changed = false;
+  const updatedFields = [];
+  const unchangedFields = [];
+  const rejectedFields = [];
+  const rejectField = (field, code, reason, allowedActions) => {
+    rejectedFields.push({ field, code, reason, allowed_actions: allowedActions });
+  };
+
+  if (args?.customer_name !== undefined) {
+    const customerName = sanitizeRealtimeAgentCustomerName(args.customer_name);
+    if (!customerName) {
+      rejectField("customer_name", "INVALID_CUSTOMER_NAME", "invalid_format", ["ask_for_customer_name"]);
+    } else if (draft.customerName === customerName) {
+      unchangedFields.push("customer_name");
+    } else if (!isRealtimeAgentCustomerNameExplicit(currentTranscript, customerName)) {
+      rejectField("customer_name", "CUSTOMER_NAME_EVIDENCE_REQUIRED", "not_found_in_current_user_turn", ["ask_for_customer_name"]);
+    } else {
+      changed = true;
+      draft.customerName = customerName;
+      updatedFields.push("customer_name");
+    }
+  }
 
   if (args?.use_caller_number === true) {
     const candidate = normalizePhoneForComparison(draft.callerPhoneCandidate);
+    const currentPhone = normalizePhoneForComparison(draft.phone);
     const askedBeforeCurrentSpeech = state.callerPhonePromptSpeechSequence >= 0 &&
       state.userSpeechSequence > state.callerPhonePromptSpeechSequence;
     const affirmativeAfterQuestion = transcriptMatchesCurrentSpeech && askedBeforeCurrentSpeech &&
       isPhoneCallerNumberAffirmative(currentTranscript);
     const proactiveAuthorization = transcriptMatchesCurrentSpeech &&
       isExplicitCallerNumberAuthorization(currentTranscript);
-    if (!candidate || args?.caller_number_confirmed !== true || (!affirmativeAfterQuestion && !proactiveAuthorization)) {
-      return {
-        ok: false,
-        code: "CALLER_PHONE_CONFIRMATION_REQUIRED",
-        error: { field: "phone", reason: candidate ? "explicit_authorization_missing" : "caller_number_unavailable" },
-        candidate_phone_last4: candidate ? phoneLast4(candidate) : null,
-        missing_fields: ["phone"],
-        allowed_actions: candidate ? ["ask_caller_number_authorization", "ask_for_other_phone"] : ["ask_for_phone"]
-      };
+    if (candidate && currentPhone === candidate) {
+      unchangedFields.push("phone");
+    } else if (!candidate || args?.caller_number_confirmed !== true || (!affirmativeAfterQuestion && !proactiveAuthorization)) {
+      rejectField(
+        "phone",
+        "CALLER_PHONE_CONFIRMATION_REQUIRED",
+        candidate ? "explicit_authorization_missing" : "caller_number_unavailable",
+        candidate ? ["ask_caller_number_authorization", "ask_for_other_phone"] : ["ask_for_phone"]
+      );
+    } else {
+      draft.phone = formatPhoneWithHyphen(candidate);
+      draft.phoneMismatchConfirmation = undefined;
+      changed = true;
+      updatedFields.push("phone");
+    }
+  } else if (args?.phone !== undefined) {
+    const digits = normalizePhoneForComparison(args.phone);
+    const currentPhone = normalizePhoneForComparison(draft.phone);
+    if (digits && currentPhone === digits) {
+      unchangedFields.push("phone");
+    } else if (!isLikelyCustomerPhone(digits)) {
+      rejectField("phone", "INVALID_PHONE", "invalid_format", ["ask_for_phone"]);
+    } else if (!isRealtimeAgentPhoneExplicit(currentTranscript, digits)) {
+      rejectField("phone", "PHONE_EVIDENCE_REQUIRED", "not_found_in_current_user_turn", ["ask_for_phone"]);
+    } else {
+      draft.phone = formatPhoneWithHyphen(digits);
+      changed = true;
+      updatedFields.push("phone");
+    }
+  }
+
+  if (typeof args?.first_visit === "boolean") {
+    const explicitAnswer = transcriptMatchesCurrentSpeech
+      ? extractFirstVisitAnswer(currentTranscript)
+      : undefined;
+    if (draft.firstVisit === args.first_visit) {
+      unchangedFields.push("first_visit");
+    } else if (explicitAnswer === undefined || explicitAnswer !== args.first_visit) {
+      rejectField("first_visit", "FIRST_VISIT_CONFIRMATION_REQUIRED", "explicit_answer_missing_or_mismatched", ["ask_first_visit_status"]);
+    } else {
+      draft.firstVisit = args.first_visit;
+      changed = true;
+      updatedFields.push("first_visit");
     }
   }
 
@@ -9720,107 +9835,38 @@ function recordRealtimeAgentBookingDetails(session, args) {
       isAttentionConfirmationAnswer(currentTranscript);
     const proactiveConfirmation = transcriptMatchesCurrentSpeech &&
       isExplicitAttentionConfirmation(currentTranscript);
-    if (!affirmativeAfterQuestion && !proactiveConfirmation) {
-      return {
-        ok: false,
-        code: "ATTENTION_CONFIRMATION_REQUIRED",
-        error: { field: "attention_confirmed", reason: "explicit_confirmation_missing" },
-        missing_fields: ["attention_confirmed"],
-        allowed_actions: ["ask_attention_confirmation"]
-      };
+    if (draft.attentionConfirmed === true) {
+      unchangedFields.push("attention_confirmed");
+    } else if (!affirmativeAfterQuestion && !proactiveConfirmation) {
+      rejectField("attention_confirmed", "ATTENTION_CONFIRMATION_REQUIRED", "explicit_confirmation_missing", ["ask_attention_confirmation"]);
+    } else {
+      draft.attentionConfirmed = true;
+      changed = true;
+      updatedFields.push("attention_confirmed");
     }
   }
 
-  if (typeof args?.first_visit === "boolean") {
-    const explicitAnswer = transcriptMatchesCurrentSpeech
-      ? extractFirstVisitAnswer(currentTranscript)
-      : undefined;
-    if (explicitAnswer === undefined || explicitAnswer !== args.first_visit) {
-      return {
-        ok: false,
-        code: "FIRST_VISIT_CONFIRMATION_REQUIRED",
-        error: { field: "first_visit", reason: "explicit_answer_missing_or_mismatched" },
-        missing_fields: ["first_visit"],
-        allowed_actions: ["ask_first_visit_status"]
-      };
-    }
-  }
-
-  let changed = false;
-  const updatedFields = [];
-  if (args?.customer_name !== undefined) {
-    const customerName = sanitizeRealtimeAgentCustomerName(args.customer_name);
-    if (!customerName) {
-      return {
-        ok: false,
-        code: "INVALID_CUSTOMER_NAME",
-        error: { field: "customer_name", reason: "invalid_format" },
-        missing_fields: ["customer_name"],
-        allowed_actions: ["ask_for_customer_name"]
-      };
-    }
-    if (!isRealtimeAgentCustomerNameExplicit(currentTranscript, customerName)) {
-      return {
-        ok: false,
-        code: "CUSTOMER_NAME_EVIDENCE_REQUIRED",
-        error: { field: "customer_name", reason: "not_found_in_current_user_turn" },
-        missing_fields: ["customer_name"],
-        allowed_actions: ["ask_for_customer_name"]
-      };
-    }
-    if (draft.customerName !== customerName) changed = true;
-    draft.customerName = customerName;
-    updatedFields.push("customer_name");
-  }
-  if (args?.use_caller_number === true) {
-    const phone = formatPhoneWithHyphen(normalizePhoneForComparison(draft.callerPhoneCandidate));
-    if (draft.phone !== phone) changed = true;
-    draft.phone = phone;
-    draft.phoneMismatchConfirmation = undefined;
-    updatedFields.push("phone");
-  } else if (args?.phone !== undefined) {
-    const digits = normalizePhoneForComparison(args.phone);
-    if (!isLikelyCustomerPhone(digits)) {
-      return {
-        ok: false,
-        code: "INVALID_PHONE",
-        error: { field: "phone", reason: "invalid_format" },
-        missing_fields: ["phone"],
-        allowed_actions: ["ask_for_phone"]
-      };
-    }
-    if (!isRealtimeAgentPhoneExplicit(currentTranscript, digits)) {
-      return {
-        ok: false,
-        code: "PHONE_EVIDENCE_REQUIRED",
-        error: { field: "phone", reason: "not_found_in_current_user_turn" },
-        missing_fields: ["phone"],
-        allowed_actions: ["ask_for_phone"]
-      };
-    }
-    const phone = formatPhoneWithHyphen(digits);
-    if (draft.phone !== phone) changed = true;
-    draft.phone = phone;
-    updatedFields.push("phone");
-  }
-  if (typeof args?.first_visit === "boolean") {
-    if (draft.firstVisit !== args.first_visit) changed = true;
-    draft.firstVisit = args.first_visit;
-    updatedFields.push("first_visit");
-  }
-  if (args?.attention_confirmed === true) {
-    if (draft.attentionConfirmed !== true) changed = true;
-    draft.attentionConfirmed = true;
-    updatedFields.push("attention_confirmed");
-  }
   if (changed) invalidateRealtimeAgentConfirmation(session);
 
   const missingFields = getRealtimeAgentMissingFields(draft);
+  const collectionState = getRealtimeAgentCollectionState(draft);
+  const acceptedFields = [...new Set([...updatedFields, ...unchangedFields])];
+  const hasAcceptedField = acceptedFields.length > 0;
+  const hasRejectedField = rejectedFields.length > 0;
+  const code = hasRejectedField
+    ? (hasAcceptedField ? "DETAILS_PARTIALLY_RECORDED" : rejectedFields[0].code)
+    : (acceptedFields.length ? (missingFields.length ? "DETAILS_RECORDED" : "DETAILS_COMPLETE") : "NO_DETAILS_PROVIDED");
   return {
-    ok: true,
-    code: missingFields.length ? "DETAILS_RECORDED" : "DETAILS_COMPLETE",
+    ok: !hasRejectedField || hasAcceptedField,
+    code,
     updated_fields: [...new Set(updatedFields)],
-    collection_state: getRealtimeAgentCollectionState(draft),
+    unchanged_fields: [...new Set(unchangedFields)],
+    rejected_fields: rejectedFields,
+    missing_fields: missingFields,
+    collection_state: collectionState,
+    do_not_repeat_collected_fields: Object.entries(collectionState)
+      .filter(([key, value]) => key.endsWith("_collected") && value === true)
+      .map(([key]) => key.replace(/_collected$/, "")),
     ready_for_final_confirmation: missingFields.length === 0,
     allowed_actions: getRealtimeAgentAllowedActions(draft)
   };
@@ -10149,7 +10195,7 @@ function formatRealtimeAgentCourseFacts(courses) {
 function isExplicitCallerNumberAuthorization(transcript) {
   const text = normalizeJapaneseSpeech(transcript).replace(/\s+/g, "");
   const referencesCallerNumber = /(?:今|この|かけている|かけてる|発信元|同じ).{0,8}(?:電話)?番号|(?:電話)?番号.{0,8}(?:今|この|同じ|使)/u.test(text);
-  const authorizesUse = /(?:お願いします|送って|使って|大丈夫|構いません|問題ない|それでいい|その番号で)/u.test(text);
+  const authorizesUse = /(?:お願いします|送って|使って|大丈夫|構いません|問題ない|それでいい|その番号で|間違いない|合っています|合ってます|そのままで)/u.test(text);
   return referencesCallerNumber && authorizesUse;
 }
 
@@ -10251,7 +10297,9 @@ export {
   createPhoneSession,
   createRealtimeAgentState,
   createRealtimeAgentReservationHold,
+  enqueuePhonePersistence,
   findRealtimeAgentNextAvailability,
+  flushPhonePersistence,
   getRealtimeAgentReceptionState,
   markRealtimeAgentAssistantEvidence,
   openRealtimeAgentCircuit,
