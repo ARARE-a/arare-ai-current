@@ -36,7 +36,7 @@ assert.equal(health?.ok, true, "Production relay must be healthy");
 assert.equal(health?.databaseHealth?.ok, true, "Production database must be healthy");
 assert.equal(health?.realtimeAgent?.enabled, true, "GPT Realtime agent must be enabled");
 assert.equal(health?.realtimeAgent?.architecture, "native-speech-to-speech");
-assert.equal(health?.realtimeAgent?.conversationFlowVersion, 13);
+assert.equal(health?.realtimeAgent?.conversationFlowVersion, 14);
 assert.equal(health?.realtimeAgent?.model, "gpt-realtime-2.1");
 assert.equal(health?.realtimeAgent?.voice, "cedar");
 assert.equal(health?.realtimeAgent?.transcriptionModel, "gpt-4o-transcribe");
@@ -44,6 +44,7 @@ assert.equal(health?.realtimeAgent?.vadEagerness, "medium");
 assert.equal(health?.realtimeAgent?.completeCourseComparisonFactsReady, true);
 assert.equal(health?.realtimeAgent?.deterministicCourseComparisonSpeechReady, true);
 assert.equal(health?.realtimeAgent?.noAudioResponseRecoveryReady, true);
+assert.equal(health?.realtimeAgent?.sessionHandshakeReady, true);
 
 const synthesizedQuestion = await synthesizeJapanesePcm(question);
 const questionPcmu = pcm24kToPcmu8k(synthesizedQuestion);

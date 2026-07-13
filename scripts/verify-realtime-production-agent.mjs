@@ -25,7 +25,7 @@ if (
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 13 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 14 ||
   health?.realtimeAgent?.reasoningEffort !== "low" ||
   health?.realtimeAgent?.vadEagerness !== "medium" ||
   health?.realtimeAgent?.maxOutputTokens !== 512 ||
@@ -33,6 +33,7 @@ if (
   health?.realtimeAgent?.truncationPostInstructionsTokens !== 1800 ||
   health?.realtimeAgent?.boundedConversationContextReady !== true ||
   health?.realtimeAgent?.noAudioResponseRecoveryReady !== true ||
+  health?.realtimeAgent?.sessionHandshakeReady !== true ||
   health?.realtimeAgent?.preambleAudioEnabled !== true ||
   health?.realtimeAgent?.manualTurnControlReady !== true ||
   health?.realtimeAgent?.automaticVadResponseDisabled !== true ||
@@ -178,6 +179,7 @@ const report = {
   unsignedLegacyWebSocketRejected,
   healthArchitecture: health.realtimeAgent.architecture,
   conversationFlowVersion: health.realtimeAgent.conversationFlowVersion,
+  sessionHandshakeReady: health.realtimeAgent.sessionHandshakeReady,
   manualTurnControlReady: health.realtimeAgent.manualTurnControlReady,
   automaticVadResponseDisabled: health.realtimeAgent.automaticVadResponseDisabled,
   automaticVadInterruptDisabled: health.realtimeAgent.automaticVadInterruptDisabled,

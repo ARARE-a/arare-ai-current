@@ -15,7 +15,11 @@ class FakeSocket extends EventEmitter {
   }
 
   send(value) {
-    this.sent.push(JSON.parse(value));
+    const message = JSON.parse(value);
+    this.sent.push(message);
+    if (message.type === "session.update") {
+      queueMicrotask(() => this.emit("message", JSON.stringify({ type: "session.updated" })));
+    }
   }
 
   close() {

@@ -3,10 +3,11 @@ import { EventEmitter } from "node:events";
 import { OpenAiRealtimeAgentBridge } from "./lib/openai-realtime-agent-bridge.mjs";
 
 class FakeSocket extends EventEmitter {
-  constructor() {
+  constructor(options = {}) {
     super();
     this.readyState = 0;
     this.sent = [];
+    this.autoSessionUpdated = options.autoSessionUpdated !== false;
   }
 
   open() {
@@ -15,7 +16,11 @@ class FakeSocket extends EventEmitter {
   }
 
   send(value) {
-    this.sent.push(JSON.parse(value));
+    const message = JSON.parse(value);
+    this.sent.push(message);
+    if (message.type === "session.update" && this.autoSessionUpdated) {
+      queueMicrotask(() => this.emit("message", JSON.stringify({ type: "session.updated" })));
+    }
   }
 
   close() {
@@ -120,6 +125,35 @@ assert.equal(sessionUpdate.session.truncation.retention_ratio, 0.8);
 assert.equal(sessionUpdate.session.truncation.token_limits.post_instructions, 1800);
 assert.equal(sessionUpdate.session.audio.output.voice, "cedar");
 assert.deepEqual(sessionUpdate.session.tools, tools);
+assert.equal(bridge.sessionReady, true);
+
+const handshakeTwilio = new FakeSocket();
+handshakeTwilio.open();
+const handshakeOpenAi = new FakeSocket({ autoSessionUpdated: false });
+const handshakeBridge = new OpenAiRealtimeAgentBridge({
+  twilioSocket: handshakeTwilio,
+  apiKey: "test-key",
+  model: "gpt-realtime-2.1",
+  voice: "cedar",
+  transcriptionModel: "gpt-4o-transcribe",
+  instructions: "日本語で応答してください。",
+  tools: [],
+  openAiSocketFactory: () => {
+    queueMicrotask(() => handshakeOpenAi.open());
+    return handshakeOpenAi;
+  }
+});
+let handshakeResolved = false;
+const handshakeConnect = handshakeBridge.connect().then(() => {
+  handshakeResolved = true;
+});
+await tick();
+assert.equal(handshakeOpenAi.sent[0].type, "session.update");
+assert.equal(handshakeResolved, false, "connect must wait for session.updated");
+handshakeOpenAi.emit("message", JSON.stringify({ type: "session.updated" }));
+await handshakeConnect;
+assert.equal(handshakeResolved, true);
+handshakeBridge.close();
 
 await bridge.handleTwilioMessage({
   event: "start",

@@ -47,6 +47,7 @@ export class OpenAiRealtimeAgentBridge {
     this.openai = undefined;
     this.pendingInputAudio = [];
     this.closed = false;
+    this.sessionReady = false;
     this.responseWatchdog = undefined;
     this.responseActive = false;
     this.responseHadAudio = false;
@@ -97,26 +98,67 @@ export class OpenAiRealtimeAgentBridge {
     });
     socket.on("close", () => {
       this.clearResponseWatchdog();
-      if (!this.closed) void this.fail(new Error("OpenAI Realtime agent connection closed"));
+      if (!this.closed && this.sessionReady) {
+        void this.fail(new Error("OpenAI Realtime agent connection closed"));
+      }
     });
     socket.on("error", (error) => {
-      if (!this.closed) void this.fail(error instanceof Error ? error : new Error(String(error)));
+      if (!this.closed && this.sessionReady) {
+        void this.fail(error instanceof Error ? error : new Error(String(error)));
+      }
     });
 
     await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("OpenAI Realtime agent connection timeout")), 12000);
-      socket.once("open", () => {
+      const cleanup = () => {
         clearTimeout(timeout);
-        socket.send(JSON.stringify(this.buildSessionUpdate()));
+        socket.off("open", onOpen);
+        socket.off("message", onMessage);
+        socket.off("close", onClose);
+        socket.off("error", onError);
+      };
+      const finishReady = () => {
+        cleanup();
+        this.sessionReady = true;
         for (const audio of this.pendingInputAudio.splice(0)) {
           socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio }));
         }
         resolve();
-      });
-      socket.once("error", (error) => {
-        clearTimeout(timeout);
+      };
+      const failReady = (error) => {
+        cleanup();
         reject(error instanceof Error ? error : new Error(String(error)));
-      });
+      };
+      const onMessage = (raw) => {
+        let event;
+        try {
+          event = JSON.parse(raw.toString());
+        } catch {
+          return;
+        }
+        if (event.type === "session.updated") {
+          finishReady();
+          return;
+        }
+        if (event.type === "error") {
+          const reason = [event.error?.code, event.error?.message ?? event.message]
+            .filter(Boolean)
+            .join(": ");
+          failReady(new Error(reason || "OpenAI Realtime session update failed"));
+        }
+      };
+      const onClose = () => failReady(new Error("OpenAI Realtime agent connection closed before session setup"));
+      const onError = (error) => failReady(error);
+      const onOpen = () => {
+        socket.send(JSON.stringify(this.buildSessionUpdate()));
+      };
+      const timeout = setTimeout(
+        () => failReady(new Error("OpenAI Realtime agent session setup timeout")),
+        12000
+      );
+      socket.on("message", onMessage);
+      socket.once("close", onClose);
+      socket.once("error", onError);
+      socket.once("open", onOpen);
     });
   }
 
@@ -298,6 +340,7 @@ export class OpenAiRealtimeAgentBridge {
     }
     if (event.type === "error") {
       const reason = event.error?.message ?? event.message ?? "OpenAI Realtime agent error";
+      if (!this.sessionReady) return;
       if (/no active response|Cancellation failed/i.test(reason)) return;
       if (/Audio content of \d+ms is already shorter than \d+ms/i.test(reason)) {
         this.log("openai_realtime_agent_stale_truncate_ignored", { reason });
@@ -683,6 +726,7 @@ export class OpenAiRealtimeAgentBridge {
 
   close() {
     this.closed = true;
+    this.sessionReady = false;
     this.clearResponseWatchdog();
     for (const turn of this.speechTurns.values()) {
       if (turn.interruptTimer) clearTimeout(turn.interruptTimer);
