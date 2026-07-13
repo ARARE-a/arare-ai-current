@@ -15,6 +15,12 @@ export class OpenAiRealtimeAgentBridge {
     this.reasoningEffort = normalizeReasoningEffort(options.reasoningEffort);
     this.commentaryAudioEnabled = options.commentaryAudioEnabled === true;
     this.vadEagerness = options.vadEagerness ?? "medium";
+    this.vadMode = normalizeVadMode(options.vadMode);
+    this.serverVadThreshold = clampNumber(options.serverVadThreshold, 0.1, 0.9, 0.5);
+    this.serverVadPrefixPaddingMs = Math.round(clampNumber(options.serverVadPrefixPaddingMs, 100, 1000, 300));
+    this.serverVadSilenceDurationMs = Math.round(
+      clampNumber(options.serverVadSilenceDurationMs, 500, 2000, 900)
+    );
     this.maxOutputTokens = clampNumber(options.maxOutputTokens, 64, 512, 512);
     this.truncationRetentionRatio = clampNumber(options.truncationRetentionRatio, 0.5, 0.95, 0.8);
     this.truncationPostInstructionsTokens = Math.round(
@@ -189,12 +195,7 @@ export class OpenAiRealtimeAgentBridge {
               model: this.transcriptionModel,
               language: "ja"
             },
-            turn_detection: {
-              type: "semantic_vad",
-              eagerness: this.vadEagerness,
-              create_response: !this.manualTurnControl,
-              interrupt_response: !this.manualTurnControl
-            }
+            turn_detection: this.buildTurnDetection()
           },
           output: {
             format: { type: "audio/pcmu" },
@@ -202,6 +203,25 @@ export class OpenAiRealtimeAgentBridge {
           }
         }
       }
+    };
+  }
+
+  buildTurnDetection() {
+    if (this.vadMode === "server_vad") {
+      return {
+        type: "server_vad",
+        threshold: this.serverVadThreshold,
+        prefix_padding_ms: this.serverVadPrefixPaddingMs,
+        silence_duration_ms: this.serverVadSilenceDurationMs,
+        create_response: !this.manualTurnControl,
+        interrupt_response: !this.manualTurnControl
+      };
+    }
+    return {
+      type: "semantic_vad",
+      eagerness: this.vadEagerness,
+      create_response: !this.manualTurnControl,
+      interrupt_response: !this.manualTurnControl
     };
   }
 
@@ -1086,6 +1106,12 @@ function clampNumber(value, min, max, fallback) {
 function normalizeReasoningEffort(value) {
   const effort = String(value ?? "low").trim().toLowerCase();
   return ["minimal", "low", "medium", "high"].includes(effort) ? effort : "low";
+}
+
+function normalizeVadMode(value) {
+  return String(value ?? "server_vad").trim().toLowerCase() === "semantic_vad"
+    ? "semantic_vad"
+    : "server_vad";
 }
 
 function finiteNumberOrNull(value) {

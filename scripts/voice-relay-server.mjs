@@ -51,6 +51,27 @@ const realtimeAgentPreambleAudioEnabled = process.env.OPENAI_REALTIME_AGENT_PREA
 const realtimeAgentVadEagerness = normalizeRealtimeVadEagerness(
   process.env.OPENAI_REALTIME_AGENT_VAD_EAGERNESS ?? realtimeMediaVadEagerness
 );
+const realtimeAgentVadMode = normalizeRealtimeVadMode(
+  process.env.OPENAI_REALTIME_AGENT_VAD_MODE ?? "server_vad"
+);
+const realtimeAgentServerVadThreshold = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_SERVER_VAD_THRESHOLD",
+  0.5,
+  0.1,
+  0.9
+);
+const realtimeAgentServerVadPrefixPaddingMs = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_SERVER_VAD_PREFIX_PADDING_MS",
+  300,
+  100,
+  1000
+);
+const realtimeAgentServerVadSilenceDurationMs = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_SERVER_VAD_SILENCE_DURATION_MS",
+  900,
+  500,
+  2000
+);
 const realtimeAgentMaxOutputTokens = boundedNumberEnv(
   "OPENAI_REALTIME_AGENT_MAX_OUTPUT_TOKENS",
   512,
@@ -398,7 +419,13 @@ const server = http.createServer(async (request, response) => {
           transcriptionModel: realtimeAgentTranscriptionModel,
           reasoningEffort: realtimeAgentReasoningEffort,
           preambleAudioEnabled: realtimeAgentPreambleAudioEnabled,
+          vadMode: realtimeAgentVadMode,
           vadEagerness: realtimeAgentVadEagerness,
+          serverVadThreshold: realtimeAgentServerVadThreshold,
+          serverVadPrefixPaddingMs: realtimeAgentServerVadPrefixPaddingMs,
+          serverVadSilenceDurationMs: realtimeAgentServerVadSilenceDurationMs,
+          serverVadManualTurnControlReady:
+            realtimeAgentVadMode === "server_vad" && realtimeAgentManualTurnControl,
           maxOutputTokens: realtimeAgentMaxOutputTokens,
           truncationRetentionRatio: realtimeAgentTruncationRetentionRatio,
           truncationPostInstructionsTokens: realtimeAgentTruncationPostInstructionsTokens,
@@ -407,7 +434,7 @@ const server = http.createServer(async (request, response) => {
           noAudioResponseRecoveryReady: true,
           sessionHandshakeReady: true,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 14,
+          conversationFlowVersion: 15,
           scriptedReplyPrimary: false,
           manualTurnControlReady: realtimeAgentManualTurnControl,
           automaticVadResponseDisabled: realtimeAgentManualTurnControl,
@@ -1096,7 +1123,11 @@ agentWss.on("connection", (twilioSocket) => {
         transcriptionModel: realtimeAgentTranscriptionModel,
         reasoningEffort: realtimeAgentReasoningEffort,
         commentaryAudioEnabled: realtimeAgentPreambleAudioEnabled,
+        vadMode: realtimeAgentVadMode,
         vadEagerness: realtimeAgentVadEagerness,
+        serverVadThreshold: realtimeAgentServerVadThreshold,
+        serverVadPrefixPaddingMs: realtimeAgentServerVadPrefixPaddingMs,
+        serverVadSilenceDurationMs: realtimeAgentServerVadSilenceDurationMs,
         maxOutputTokens: realtimeAgentMaxOutputTokens,
         truncationRetentionRatio: realtimeAgentTruncationRetentionRatio,
         truncationPostInstructionsTokens: realtimeAgentTruncationPostInstructionsTokens,
@@ -8235,6 +8266,12 @@ function sanitizeCallLogText(value) {
 function normalizeRealtimeVadEagerness(value) {
   const normalized = String(value ?? "").trim().toLowerCase();
   return ["low", "medium", "high", "auto"].includes(normalized) ? normalized : "medium";
+}
+
+function normalizeRealtimeVadMode(value) {
+  return String(value ?? "").trim().toLowerCase() === "semantic_vad"
+    ? "semantic_vad"
+    : "server_vad";
 }
 
 function normalizeRealtimeReasoningEffort(value) {

@@ -25,9 +25,14 @@ if (
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 14 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 15 ||
   health?.realtimeAgent?.reasoningEffort !== "low" ||
+  health?.realtimeAgent?.vadMode !== "server_vad" ||
   health?.realtimeAgent?.vadEagerness !== "medium" ||
+  health?.realtimeAgent?.serverVadThreshold !== 0.5 ||
+  health?.realtimeAgent?.serverVadPrefixPaddingMs !== 300 ||
+  health?.realtimeAgent?.serverVadSilenceDurationMs !== 900 ||
+  health?.realtimeAgent?.serverVadManualTurnControlReady !== true ||
   health?.realtimeAgent?.maxOutputTokens !== 512 ||
   health?.realtimeAgent?.truncationRetentionRatio !== 0.8 ||
   health?.realtimeAgent?.truncationPostInstructionsTokens !== 1800 ||
@@ -179,6 +184,8 @@ const report = {
   unsignedLegacyWebSocketRejected,
   healthArchitecture: health.realtimeAgent.architecture,
   conversationFlowVersion: health.realtimeAgent.conversationFlowVersion,
+  vadMode: health.realtimeAgent.vadMode,
+  serverVadSilenceDurationMs: health.realtimeAgent.serverVadSilenceDurationMs,
   sessionHandshakeReady: health.realtimeAgent.sessionHandshakeReady,
   manualTurnControlReady: health.realtimeAgent.manualTurnControlReady,
   automaticVadResponseDisabled: health.realtimeAgent.automaticVadResponseDisabled,

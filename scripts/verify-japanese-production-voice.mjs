@@ -19,6 +19,8 @@ const fromNumber = "+818000000000";
 const callSid = `CA_REGRESSION_JAPANESE_${Date.now()}`;
 const streamSid = `MZ_REGRESSION_JAPANESE_${Date.now()}`;
 const timeoutMs = Number(process.env.VERIFY_JAPANESE_PRODUCTION_TIMEOUT_MS ?? 45000);
+const expectedVadEagerness = process.env.VERIFY_JAPANESE_EXPECTED_VAD_EAGERNESS ?? "medium";
+const expectedVadMode = process.env.VERIFY_JAPANESE_EXPECTED_VAD_MODE ?? "server_vad";
 const question = "60分と90分は何が違いますか？";
 
 if (!accountSid || !authToken || !toNumber || !openAiKey) {
@@ -36,11 +38,16 @@ assert.equal(health?.ok, true, "Production relay must be healthy");
 assert.equal(health?.databaseHealth?.ok, true, "Production database must be healthy");
 assert.equal(health?.realtimeAgent?.enabled, true, "GPT Realtime agent must be enabled");
 assert.equal(health?.realtimeAgent?.architecture, "native-speech-to-speech");
-assert.equal(health?.realtimeAgent?.conversationFlowVersion, 14);
+assert.equal(health?.realtimeAgent?.conversationFlowVersion, 15);
 assert.equal(health?.realtimeAgent?.model, "gpt-realtime-2.1");
 assert.equal(health?.realtimeAgent?.voice, "cedar");
 assert.equal(health?.realtimeAgent?.transcriptionModel, "gpt-4o-transcribe");
-assert.equal(health?.realtimeAgent?.vadEagerness, "medium");
+assert.equal(health?.realtimeAgent?.vadMode, expectedVadMode);
+assert.equal(health?.realtimeAgent?.vadEagerness, expectedVadEagerness);
+assert.equal(health?.realtimeAgent?.serverVadThreshold, 0.5);
+assert.equal(health?.realtimeAgent?.serverVadPrefixPaddingMs, 300);
+assert.equal(health?.realtimeAgent?.serverVadSilenceDurationMs, 900);
+assert.equal(health?.realtimeAgent?.serverVadManualTurnControlReady, true);
 assert.equal(health?.realtimeAgent?.completeCourseComparisonFactsReady, true);
 assert.equal(health?.realtimeAgent?.deterministicCourseComparisonSpeechReady, true);
 assert.equal(health?.realtimeAgent?.noAudioResponseRecoveryReady, true);
@@ -51,7 +58,8 @@ const questionPcmu = pcm24kToPcmu8k(synthesizedQuestion);
 assert.ok(questionPcmu.length > 8000, "Synthesized Japanese question was unexpectedly short");
 
 const twiml = await fetchSignedRealtimeTwiml();
-const websocketUrl = extractStreamUrl(twiml);
+let websocketUrl = extractStreamUrl(twiml);
+if (forwardedProto === "http") websocketUrl = websocketUrl.replace(/^wss:/u, "ws:");
 const customParameters = extractParameters(twiml);
 assert.ok(websocketUrl, "Realtime webhook must return a Media Stream URL");
 assert.equal(customParameters.agentMode, "native-speech-to-speech");
@@ -297,7 +305,7 @@ function openMediaStream({ websocketUrl, websocketSignature, customParameters })
   async function sendCallerAudio(pcmu) {
     await opened;
     const silenceBefore = Buffer.alloc(160 * 12, 0xff);
-    const silenceAfter = Buffer.alloc(160 * 30, 0xff);
+    const silenceAfter = Buffer.alloc(160 * 75, 0xff);
     const payload = Buffer.concat([silenceBefore, pcmu, silenceAfter]);
     const speechEndOffset = silenceBefore.length + pcmu.length;
     let speechCompletedAt = null;

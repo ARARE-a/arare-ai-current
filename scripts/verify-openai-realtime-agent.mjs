@@ -60,6 +60,10 @@ const bridge = new OpenAiRealtimeAgentBridge({
   model: "gpt-realtime-2.1",
   voice: "cedar",
   transcriptionModel: "gpt-4o-transcribe",
+  vadMode: "server_vad",
+  serverVadThreshold: 0.5,
+  serverVadPrefixPaddingMs: 300,
+  serverVadSilenceDurationMs: 900,
   bargeInDelayMs: 250,
   transcriptionWatchdogMs: 1000,
   instructions: "日本語で自然に応答してください。",
@@ -117,6 +121,10 @@ const sessionUpdate = openai.sent[0];
 assert.equal(sessionUpdate.type, "session.update");
 assert.equal(sessionUpdate.session.model, "gpt-realtime-2.1");
 assert.equal(sessionUpdate.session.reasoning.effort, "low");
+assert.equal(sessionUpdate.session.audio.input.turn_detection.type, "server_vad");
+assert.equal(sessionUpdate.session.audio.input.turn_detection.threshold, 0.5);
+assert.equal(sessionUpdate.session.audio.input.turn_detection.prefix_padding_ms, 300);
+assert.equal(sessionUpdate.session.audio.input.turn_detection.silence_duration_ms, 900);
 assert.equal(sessionUpdate.session.audio.input.turn_detection.create_response, false);
 assert.equal(sessionUpdate.session.audio.input.turn_detection.interrupt_response, false);
 assert.equal(sessionUpdate.session.max_output_tokens, 512);

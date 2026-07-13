@@ -34,6 +34,14 @@ services:
         value: low
       - key: OPENAI_REALTIME_AGENT_VAD_EAGERNESS
         value: medium
+      - key: OPENAI_REALTIME_AGENT_VAD_MODE
+        value: server_vad
+      - key: OPENAI_REALTIME_AGENT_SERVER_VAD_THRESHOLD
+        value: "0.5"
+      - key: OPENAI_REALTIME_AGENT_SERVER_VAD_PREFIX_PADDING_MS
+        value: "300"
+      - key: OPENAI_REALTIME_AGENT_SERVER_VAD_SILENCE_DURATION_MS
+        value: "900"
       - key: OPENAI_REALTIME_AGENT_MAX_OUTPUT_TOKENS
         value: "512"
       - key: OPENAI_REALTIME_AGENT_PREAMBLE_AUDIO_ENABLED
