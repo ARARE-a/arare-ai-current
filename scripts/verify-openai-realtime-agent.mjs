@@ -68,6 +68,14 @@ const bridge = new OpenAiRealtimeAgentBridge({
   onAssistantTranscript: async (text) => assistantTranscripts.push(text),
   onToolCall: async (call) => {
     toolCalls.push(call);
+    if (call.name === "prepare_final_confirmation") {
+      return {
+        ok: true,
+        code: "FINAL_CONFIRMATION_READY",
+        spoken_summary: "7月16日22時、90分スタンダードコース、17,000円、フリー、斎藤様で仮受付します。よろしいですか？",
+        confirmation_token: "confirmation-token"
+      };
+    }
     return call.arguments.terminal
       ? {
           ok: true,
@@ -99,6 +107,7 @@ assert.equal(sessionUpdate.session.model, "gpt-realtime-2.1");
 assert.equal(sessionUpdate.session.reasoning.effort, "low");
 assert.equal(sessionUpdate.session.audio.input.turn_detection.create_response, false);
 assert.equal(sessionUpdate.session.audio.input.turn_detection.interrupt_response, false);
+assert.equal(sessionUpdate.session.max_output_tokens, 512);
 assert.equal(sessionUpdate.session.audio.output.voice, "cedar");
 assert.deepEqual(sessionUpdate.session.tools, tools);
 
@@ -145,7 +154,8 @@ assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_commen
 
 bridge.startGreeting();
 assert.equal(openai.sent.at(-1).type, "response.create");
-assert.match(openai.sent.at(-1).response.instructions, /定型文を読む必要はありません/);
+assert.match(openai.sent.at(-1).response.instructions, /ARARE AIです。ご希望をどうぞ/);
+assert.match(openai.sent.at(-1).response.instructions, /追加は禁止/);
 assert.equal(openai.sent.at(-1).response.tool_choice, "none");
 
 openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_greeting" } }));
@@ -215,6 +225,28 @@ openai.emit("message", JSON.stringify(toolResponse));
 await tick();
 assert.equal(toolCalls.length, 1, "duplicate tool call IDs must not execute twice");
 assert.equal(openai.sent.filter((item) => item.type === "response.create").length, responseCreateCount);
+
+openai.emit("message", JSON.stringify({
+  type: "response.done",
+  response: {
+    id: "resp_prepare_confirmation_tool",
+    status: "completed",
+    output: [{
+      type: "function_call",
+      name: "prepare_final_confirmation",
+      call_id: "call_prepare_confirmation_1",
+      arguments: JSON.stringify({ availability_token: "availability-token" })
+    }]
+  }
+}));
+await tick();
+const exactConfirmationRequest = openai.sent.at(-1);
+assert.equal(exactConfirmationRequest.type, "response.create");
+assert.equal(exactConfirmationRequest.response.tool_choice, "none");
+assert.match(exactConfirmationRequest.response.instructions, /utteranceの値だけ/u);
+assert.match(exactConfirmationRequest.response.instructions, /斎藤様で仮受付します/u);
+assert.match(exactConfirmationRequest.response.instructions, /言い換え、要約、省略、補足/u);
+assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_exact_spoken_follow_up"));
 
 openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_interrupt" } }));
 openai.emit("message", JSON.stringify({
@@ -473,7 +505,7 @@ assert.equal(openai.sent.at(-1).type, "response.create");
 assert.equal(openai.sent.at(-1).response.tool_choice, "none");
 
 bridge.close();
-console.log(JSON.stringify({ ok: true, checks: 67 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 73 }, null, 2));
 
 function tick() {
   return new Promise((resolve) => setImmediate(resolve));

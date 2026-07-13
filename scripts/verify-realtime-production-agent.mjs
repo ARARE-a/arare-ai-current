@@ -25,9 +25,10 @@ if (
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 8 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 10 ||
   health?.realtimeAgent?.reasoningEffort !== "low" ||
-  health?.realtimeAgent?.vadEagerness !== "high" ||
+  health?.realtimeAgent?.vadEagerness !== "medium" ||
+  health?.realtimeAgent?.maxOutputTokens !== 512 ||
   health?.realtimeAgent?.preambleAudioEnabled !== true ||
   health?.realtimeAgent?.manualTurnControlReady !== true ||
   health?.realtimeAgent?.automaticVadResponseDisabled !== true ||
@@ -45,9 +46,15 @@ if (
   health?.realtimeAgent?.partialBookingDetailsReady !== true ||
   health?.realtimeAgent?.idempotentCollectedFieldsReady !== true ||
   health?.realtimeAgent?.availabilityEvidenceGateReady !== true ||
-  health?.realtimeAgent?.finalConfirmationPriceRoomReady !== true ||
+  health?.realtimeAgent?.finalConfirmationPriceReady !== true ||
+  health?.realtimeAgent?.finalConfirmationInternalAssignmentHiddenReady !== true ||
   health?.realtimeAgent?.assignmentConsistencyGateReady !== true ||
-  health?.realtimeAgent?.firstVisitExplicitAnswerGateReady !== true ||
+  health?.realtimeAgent?.firstVisitHistoryInferenceReady !== true ||
+  health?.realtimeAgent?.standaloneAttentionTurnRemovedReady !== true ||
+  health?.realtimeAgent?.compactFinalConfirmationReady !== true ||
+  health?.realtimeAgent?.deterministicFinalConfirmationSpeechReady !== true ||
+  health?.realtimeAgent?.provisionalFreeAvailabilityReady !== true ||
+  health?.realtimeAgent?.conciseOutputBudgetReady !== true ||
   health?.realtimeAgent?.forcedToolQuestionReady !== false ||
   health?.realtimeAgent?.ambiguousConfirmationGuardReady !== true ||
   health?.realtimeAgent?.nextAvailabilityToolReady !== true ||

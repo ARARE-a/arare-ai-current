@@ -115,9 +115,11 @@ const courses = [
   { name: "90分スタンダードコース", durationMin: 90, price: 17000 },
   { name: "120分ゆったりコース", durationMin: 120, price: 22000 }
 ];
+const evidenceBaselineAt = new Date("2026-07-13T10:03:00.000Z").getTime();
 for (let index = 0; index < 300; index += 1) {
   const session = createPhoneSession();
   session.realtimeAgentState = createRealtimeAgentState();
+  session.setupAt = evidenceBaselineAt;
   const course = pick(courses, random);
   const hour = pick([13, 18, 21], random);
   const startsAt = new Date(`2026-07-14T${String(hour - 9).padStart(2, "0")}:00:00.000Z`);
@@ -146,6 +148,7 @@ for (let index = 0; index < 100; index += 1) {
 for (let index = 0; index < 150; index += 1) {
   const session = createPhoneSession();
   session.realtimeAgentState = createRealtimeAgentState();
+  session.setupAt = evidenceBaselineAt;
   const course = pick(courses, random);
   const startsAt = new Date("2026-07-14T04:00:00.000Z");
   session.conversationTurns = [{
@@ -158,6 +161,7 @@ for (let index = 0; index < 150; index += 1) {
 for (let index = 0; index < 150; index += 1) {
   const session = createPhoneSession();
   session.realtimeAgentState = createRealtimeAgentState();
+  session.setupAt = evidenceBaselineAt;
   const course = pick(courses, random);
   const wrongDuration = course.durationMin === 90 ? 60 : 90;
   const startsAt = new Date("2026-07-14T04:00:00.000Z");
@@ -171,6 +175,7 @@ for (let index = 0; index < 150; index += 1) {
 for (let index = 0; index < 100; index += 1) {
   const session = createPhoneSession();
   session.realtimeAgentState = createRealtimeAgentState();
+  session.setupAt = evidenceBaselineAt;
   const course = pick(courses, random);
   const oldHour = pick([13, 18, 21], random);
   const newHour = pick([13, 18, 21].filter((hour) => hour !== oldHour), random);
@@ -187,6 +192,7 @@ for (let index = 0; index < 100; index += 1) {
 for (let index = 0; index < 100; index += 1) {
   const session = createPhoneSession();
   session.realtimeAgentState = createRealtimeAgentState();
+  session.setupAt = evidenceBaselineAt;
   const oldCourse = pick(courses, random);
   const newCourse = pick(courses.filter((course) => course.durationMin !== oldCourse.durationMin), random);
   const startsAt = new Date("2026-07-14T04:00:00.000Z");

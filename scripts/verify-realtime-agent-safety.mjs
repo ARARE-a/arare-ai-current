@@ -4,6 +4,7 @@ process.env.VOICE_RELAY_TEST_MODE = "true";
 process.env.DEMO_AUTO_BUSINESS_HOUR_SHIFTS_ENABLED = "false";
 
 const {
+  buildFinalConfirmationText,
   buildRealtimeAgentAvailabilityKey,
   buildRealtimeAgentInstructions,
   buildRealtimeAgentOutageFallbackXml,
@@ -23,6 +24,7 @@ const {
   openRealtimeAgentCircuit,
   prepareRealtimeAgentFinalConfirmation,
   recordRealtimeAgentBookingDetails,
+  resolveRealtimeAgentBookingPreference,
   searchRealtimeAgentStoreKnowledge,
   summarizeRealtimeAgentLatencies,
   validateRealtimeAgentAvailabilityEvidence,
@@ -56,6 +58,7 @@ session.reservationDraft.startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 session.reservationDraft.course = session.storeContext.courses[0];
 session.reservationDraft.availableCourses = session.storeContext.courses;
 session.reservationDraft.nominationIntent = false;
+session.reservationDraft.bookingPreferenceConfirmed = true;
 session.reservationDraft.therapistName = "みさき";
 session.reservationDraft.selected_therapist_source = "ai_assigned_after_availability";
 session.reservationDraft.assignedTherapistId = "therapist-1";
@@ -83,19 +86,27 @@ assert.deepEqual(tools.map((tool) => tool.name), [
   "prepare_final_confirmation",
   "create_reservation_hold"
 ]);
+assert.deepEqual(tools.find((tool) => tool.name === "check_availability").parameters.required, [
+  "starts_at",
+  "course_duration_min"
+]);
+assert.deepEqual(tools.find((tool) => tool.name === "find_next_availability").parameters.required, [
+  "course_duration_min"
+]);
 const instructions = buildRealtimeAgentInstructions(session);
-assert.match(instructions, /生音声を直接理解/);
-assert.match(instructions, /固定台本はありません/);
-assert.match(instructions, /言い回し、質問の順番/);
-assert.match(instructions, /予約途中の質問、訂正、割り込み、雑談/);
-assert.match(instructions, /ツール出力は読み上げ原稿ではなく/);
-assert.match(instructions, /単なる相づちから推測しません/);
-assert.match(instructions, /合計料金、担当、部屋/);
-assert.match(instructions, /commentaryフェーズは、DBや店舗情報を確認するツールの直前/);
-assert.match(instructions, /内部推論や長い進捗説明は話しません/);
+assert.match(instructions, /通常の返答は一文/);
+assert.match(instructions, /質問された時だけ詳しく/);
+assert.match(instructions, /聞き返すのは同じ項目につき一度まで/);
+assert.match(instructions, /初回・再来と注意事項確認を独立した質問にしてはいけません/);
+assert.match(instructions, /登録済みの時間と料金を具体的に答え/);
+assert.match(instructions, /ツール出力は原則として読み上げ原稿ではなく/);
+assert.match(instructions, /prepare_final_confirmationがspoken_summaryを返した時/);
+assert.match(instructions, /部屋、内部担当、電話番号、来店歴は読み上げません/);
+assert.match(instructions, /DBの空き確認または最短検索の直前だけ『確認しますね』/);
+assert.match(instructions, /先へ進めません.*禁止/);
 assert.match(instructions, /通話開始時刻（日本時間）/);
 assert.match(instructions, /相対時刻/);
-assert.doesNotMatch(instructions, /next_question|message_for_customer|spoken_summary|spoken_reply/);
+assert.doesNotMatch(instructions, /next_question|message_for_customer|spoken_reply/);
 assert.equal(classifyRealtimeAgentFailure(new Error("insufficient_quota")), "OPENAI_INSUFFICIENT_QUOTA");
 assert.equal(classifyRealtimeAgentFailure(new Error("rate_limit_exceeded")), "OPENAI_RATE_LIMIT");
 const outageFallbackXml = buildRealtimeAgentOutageFallbackXml();
@@ -159,41 +170,23 @@ result = recordRealtimeAgentBookingDetails(session, {
 });
 assert.equal(result.ok, true);
 assert.equal(session.reservationDraft.firstVisit, false);
-assert.equal(result.collection_state.attention_confirmed, false);
-assertNoScriptedSpeechFields(result);
-
-result = recordRealtimeAgentBookingDetails(session, {
-  availability_token: "availability-token",
-  attention_confirmed: true
-});
-assert.equal(result.code, "ATTENTION_CONFIRMATION_REQUIRED");
-assert.notEqual(session.reservationDraft.attentionConfirmed, true);
-assertNoScriptedSpeechFields(result);
-
-session.realtimeAgentState.userSpeechSequence = 4;
-session.realtimeAgentState.lastUserTranscript = "注意事項と店舗ルールは確認済みです";
-session.realtimeAgentState.lastUserTranscriptSpeechSequence = 4;
-result = recordRealtimeAgentBookingDetails(session, {
-  availability_token: "availability-token",
-  attention_confirmed: true
-});
-assert.equal(result.code, "DETAILS_COMPLETE");
-assert.equal(session.reservationDraft.attentionConfirmed, true);
 assert.equal(result.collection_state.ready_for_final_confirmation, true);
 assert.equal(result.ready_for_final_confirmation, true);
 assert.ok(result.allowed_actions.includes("prepare_final_confirmation"));
 assertNoScriptedSpeechFields(result);
 
-const confirmationParts = Object.fromEntries(new Intl.DateTimeFormat("ja-JP", {
-  timeZone: "Asia/Tokyo",
-  hour: "numeric",
-  minute: "numeric",
-  hour12: false
-}).formatToParts(session.reservationDraft.startsAt).map((part) => [part.type, part.value]));
-session.realtimeAgentState.expectedConfirmationText = "internal-evidence-only";
+const spokenSummary = buildFinalConfirmationText(session.reservationDraft);
+session.realtimeAgentState.expectedConfirmationText = spokenSummary;
+assert.match(spokenSummary, /90分スタンダードコース/u);
+assert.match(spokenSummary, /17,000円/u);
+assert.match(spokenSummary, /フリー/u);
+assert.match(spokenSummary, /佐藤様/u);
+assert.match(spokenSummary, /仮受付します。よろしいですか/u);
+assert.doesNotMatch(spokenSummary, /Room|部屋|電話番号|4404|初回|再来/u);
+
 markRealtimeAgentAssistantEvidence(
   session,
-  `明日の${Number(confirmationParts.hour)}時${Number(confirmationParts.minute) ? `${Number(confirmationParts.minute)}分` : ""}、90分コース、料金17,000円、担当はみさき、部屋はルームA、佐藤様、電話番号の下4桁4404、再来で、店舗確認前の仮予約です。この内容でお間違いないですか？`
+  spokenSummary
 );
 assert.equal(session.realtimeAgentState.confirmationSpoken, true);
 
@@ -384,7 +377,15 @@ assert.equal(result.code, "LOW_TRANSCRIPTION_CONFIDENCE");
 
 const evidenceSession = createPhoneSession();
 evidenceSession.realtimeAgentState = createRealtimeAgentState();
-const candidateStart = new Date("2026-07-14T04:00:00.000Z");
+const jstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+const candidateStart = new Date(Date.UTC(
+  jstNow.getUTCFullYear(),
+  jstNow.getUTCMonth(),
+  jstNow.getUTCDate() + 1,
+  4,
+  0,
+  0
+));
 const candidateCourse = { id: "course-90", name: "90分スタンダードコース", durationMin: 90, price: 17000 };
 evidenceSession.conversationTurns = [{ role: "CUSTOMER", content: "明日の1時から20分で" }];
 result = validateRealtimeAgentAvailabilityEvidence(evidenceSession, candidateStart, candidateCourse);
@@ -416,11 +417,13 @@ evidenceSession.conversationTurns = [{ role: "CUSTOMER", content: "空いてる�
 result = validateRealtimeAgentNextAvailabilityEvidence(evidenceSession, candidateCourse);
 assert.equal(result.code, "COURSE_EVIDENCE_REQUIRED");
 
-const correctedStart = new Date("2026-07-14T06:00:00.000Z");
+const correctedStart = new Date(candidateStart.getTime() + 2 * 60 * 60 * 1000);
+const candidateJst = new Date(candidateStart.getTime() + 9 * 60 * 60 * 1000);
+const candidateMonthDay = `${candidateJst.getUTCMonth() + 1}月${candidateJst.getUTCDate()}日`;
 evidenceSession.lastAssistantText = "";
 evidenceSession.conversationTurns = [{
   role: "CUSTOMER",
-  content: "7月14日の13時、いや15時から90分でお願いします"
+  content: `${candidateMonthDay}の13時、いや15時から90分でお願いします`
 }];
 result = validateRealtimeAgentAvailabilityEvidence(evidenceSession, candidateStart, candidateCourse);
 assert.equal(result.code, "DATETIME_EVIDENCE_REQUIRED");
@@ -431,17 +434,19 @@ const course60 = { id: "course-60", name: "60分リラックスコース", durat
 evidenceSession.reservationDraft.course = course60;
 evidenceSession.conversationTurns = [{
   role: "CUSTOMER",
-  content: "7月14日の15時、60分、やっぱり90分でお願いします"
+  content: `${candidateMonthDay}の15時、60分、やっぱり90分でお願いします`
 }];
 result = validateRealtimeAgentAvailabilityEvidence(evidenceSession, correctedStart, course60);
 assert.equal(result.code, "COURSE_EVIDENCE_REQUIRED");
 result = validateRealtimeAgentAvailabilityEvidence(evidenceSession, correctedStart, candidateCourse);
 assert.equal(result, null);
 
-const correctedDateStart = new Date("2026-07-15T04:00:00.000Z");
+const correctedDateStart = new Date(candidateStart.getTime() + 24 * 60 * 60 * 1000);
+const correctedDateJst = new Date(correctedDateStart.getTime() + 9 * 60 * 60 * 1000);
+const correctedMonthDay = `${correctedDateJst.getUTCMonth() + 1}月${correctedDateJst.getUTCDate()}日`;
 evidenceSession.conversationTurns = [{
   role: "CUSTOMER",
-  content: "7月14日の13時、いや7月15日の13時から90分でお願いします"
+  content: `${candidateMonthDay}の13時、いや${correctedMonthDay}の13時から90分でお願いします`
 }];
 result = validateRealtimeAgentAvailabilityEvidence(evidenceSession, candidateStart, candidateCourse);
 assert.equal(result.code, "DATETIME_EVIDENCE_REQUIRED");
@@ -450,12 +455,85 @@ assert.equal(result, null);
 
 evidenceSession.conversationTurns = [{
   role: "CUSTOMER",
-  content: "7月14日の15時から75分でお願いします"
+  content: `${candidateMonthDay}の15時から75分でお願いします`
 }];
 result = validateRealtimeAgentAvailabilityEvidence(evidenceSession, correctedStart, course60);
 assert.equal(result.code, "COURSE_EVIDENCE_REQUIRED");
 
-console.log(JSON.stringify({ ok: true, checks: 139 }, null, 2));
+const freePreferenceSession = createIdentityTestSession();
+freePreferenceSession.reservationDraft.bookingPreferenceProvisional = true;
+freePreferenceSession.realtimeAgentState.userSpeechSequence = 1;
+freePreferenceSession.realtimeAgentState.lastUserTranscript = "フリーでお願いします";
+freePreferenceSession.realtimeAgentState.lastUserTranscriptSpeechSequence = 1;
+result = recordRealtimeAgentBookingDetails(freePreferenceSession, {
+  availability_token: "identity-availability-token",
+  booking_type: "free"
+});
+assert.equal(result.ok, true);
+assert.equal(freePreferenceSession.reservationDraft.bookingPreferenceConfirmed, true);
+assert.equal(freePreferenceSession.reservationDraft.bookingPreferenceProvisional, false);
+assert.equal(freePreferenceSession.realtimeAgentState.availabilityToken, "identity-availability-token");
+
+const falseNominationSession = createIdentityTestSession();
+falseNominationSession.reservationDraft.bookingPreferenceProvisional = true;
+falseNominationSession.realtimeAgentState.userSpeechSequence = 1;
+falseNominationSession.realtimeAgentState.lastUserTranscript = "おはよう";
+falseNominationSession.realtimeAgentState.lastUserTranscriptSpeechSequence = 1;
+result = recordRealtimeAgentBookingDetails(falseNominationSession, {
+  availability_token: "identity-availability-token",
+  booking_type: "nominated",
+  therapist_name: "みさき"
+});
+assert.equal(result.code, "BOOKING_PREFERENCE_EVIDENCE_REQUIRED");
+assert.equal(falseNominationSession.reservationDraft.bookingPreferenceConfirmed, false);
+
+const nominatedPreferenceSession = createIdentityTestSession();
+nominatedPreferenceSession.reservationDraft.bookingPreferenceProvisional = true;
+nominatedPreferenceSession.realtimeAgentState.userSpeechSequence = 1;
+nominatedPreferenceSession.realtimeAgentState.lastUserTranscript = "みさきさん指名でお願いします";
+nominatedPreferenceSession.realtimeAgentState.lastUserTranscriptSpeechSequence = 1;
+result = recordRealtimeAgentBookingDetails(nominatedPreferenceSession, {
+  availability_token: "identity-availability-token",
+  booking_type: "nominated",
+  therapist_name: "みさき"
+});
+assert.equal(result.code, "BOOKING_PREFERENCE_RECHECK_REQUIRED");
+assert.equal(nominatedPreferenceSession.reservationDraft.bookingPreferenceConfirmed, true);
+assert.equal(nominatedPreferenceSession.reservationDraft.nominationIntent, true);
+assert.equal(nominatedPreferenceSession.realtimeAgentState.availabilityToken, undefined);
+
+const explicitFreeResolutionSession = createIdentityTestSession();
+explicitFreeResolutionSession.conversationTurns = [{ role: "CUSTOMER", content: "明日の21時から90分、フリーでお願いします" }];
+let preference = resolveRealtimeAgentBookingPreference(explicitFreeResolutionSession, explicitFreeResolutionSession.storeContext);
+assert.equal(preference.found, true);
+assert.equal(preference.intent, false);
+
+const falseResolutionSession = createIdentityTestSession();
+falseResolutionSession.conversationTurns = [{ role: "CUSTOMER", content: "おはようございます" }];
+preference = resolveRealtimeAgentBookingPreference(falseResolutionSession, falseResolutionSession.storeContext);
+assert.equal(preference.found, false);
+
+const explicitNominationResolutionSession = createIdentityTestSession();
+explicitNominationResolutionSession.conversationTurns = [{ role: "CUSTOMER", content: "みさきさんを指名します" }];
+preference = resolveRealtimeAgentBookingPreference(explicitNominationResolutionSession, explicitNominationResolutionSession.storeContext);
+assert.equal(preference.found, true);
+assert.equal(preference.intent, true);
+assert.equal(preference.therapistName, "みさき");
+
+const ambiguousPreferenceSession = createIdentityTestSession();
+ambiguousPreferenceSession.conversationTurns = [{ role: "CUSTOMER", content: "はい" }];
+ambiguousPreferenceSession.lastAssistantText = "フリーか指名、どちらにしますか？";
+preference = resolveRealtimeAgentBookingPreference(ambiguousPreferenceSession, ambiguousPreferenceSession.storeContext);
+assert.equal(preference.found, false);
+
+const singlePreferenceSession = createIdentityTestSession();
+singlePreferenceSession.conversationTurns = [{ role: "CUSTOMER", content: "はい" }];
+singlePreferenceSession.lastAssistantText = "フリーでよろしいですか？";
+preference = resolveRealtimeAgentBookingPreference(singlePreferenceSession, singlePreferenceSession.storeContext);
+assert.equal(preference.found, true);
+assert.equal(preference.intent, false);
+
+console.log(JSON.stringify({ ok: true, checks: 162 }, null, 2));
 
 function createIdentityTestSession() {
   const value = createPhoneSession();

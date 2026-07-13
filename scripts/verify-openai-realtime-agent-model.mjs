@@ -58,6 +58,8 @@ await updateSessionAndWait(socket, events, {
   instructions: buildRealtimeAgentInstructions(session),
   tools: buildRealtimeAgentTools(),
   tool_choice: "auto",
+  max_output_tokens: 512,
+  reasoning: { effort: "low" },
   audio: {
     output: { format: { type: "audio/pcmu" }, voice }
   }
@@ -78,7 +80,7 @@ if (preCheckFinalSpeech) {
   throw new Error(`Model emitted caller-visible speech before the availability tool: ${preCheckFinalSpeech}`);
 }
 const availabilityArgs = parseArguments(availabilityCall);
-if (Number(availabilityArgs.course_duration_min) !== 90 || availabilityArgs.booking_type !== "free") {
+if (Number(availabilityArgs.course_duration_min) !== 90 || availabilityArgs.booking_type === "nominated") {
   throw new Error(`Availability arguments were incorrect: ${availabilityCall.arguments}`);
 }
 
@@ -96,10 +98,10 @@ sendToolOutput(socket, availabilityCall.call_id, {
   },
   collection_state: {
     availability_checked: true,
+    booking_preference_collected: true,
     customer_name_collected: false,
     phone_collected: false,
-    first_visit_collected: false,
-    attention_confirmed: false,
+    first_visit_inferred: false,
     ready_for_final_confirmation: false
   },
   allowed_actions: ["answer_related_questions", "record_booking_details", "continue_conversation"]
@@ -112,14 +114,19 @@ const autonomousFollowUp = extractUserVisibleTranscript(response);
 if (!autonomousFollowUp || /予約できました|確定しました|SMSを送りました/u.test(autonomousFollowUp)) {
   throw new Error(`Model did not produce a safe autonomous follow-up: ${autonomousFollowUp || "no transcript"}`);
 }
-const checklistMentions = [
+if (autonomousFollowUp.length > 80) {
+  throw new Error(`Model used an overlong autonomous follow-up: ${autonomousFollowUp}`);
+}
+assertRealtimeResponseBrevity(response, "autonomous follow-up", 80);
+if (/(?:初めて|初回|再来|利用歴|注意事項|店舗ルール|利用規約)/u.test(autonomousFollowUp)) {
+  throw new Error(`Model asked a removed standalone question: ${autonomousFollowUp}`);
+}
+const identityQuestionMentions = [
   /(?:名前|氏名|名字)/u,
-  /(?:電話|番号|SMS)/iu,
-  /(?:初めて|初回|再来|利用歴)/u,
-  /(?:注意事項|店舗ルール|利用規約)/u
+  /(?:電話|番号|SMS)/iu
 ].filter((pattern) => pattern.test(autonomousFollowUp)).length;
-if (checklistMentions > 2) {
-  throw new Error(`Model recited missing fields like a checklist: ${autonomousFollowUp}`);
+if (identityQuestionMentions > 1) {
+  throw new Error(`Model asked multiple identity questions in one turn: ${autonomousFollowUp}`);
 }
 
 sendUserText(socket, "その前に少し聞きたいんですが、今日は暑いですね。60分と90分ってどう違うんですか？");
@@ -145,6 +152,7 @@ const sideTopicReply = extractUserVisibleTranscript(response);
 if (!sideTopicReply || !/(?:60|六十).*(?:90|九十)|(?:90|九十).*(?:60|六十)/u.test(sideTopicReply)) {
   throw new Error(`Model did not naturally answer the side question: ${sideTopicReply || JSON.stringify(response?.output ?? [])}`);
 }
+assertRealtimeResponseBrevity(response, "course comparison", 80);
 if (/予約できました|確定しました|SMSを送りました/u.test(sideTopicReply)) {
   throw new Error(`Model fabricated a side effect while answering a side question: ${sideTopicReply}`);
 }
@@ -169,10 +177,10 @@ sendToolOutput(socket, recordCall.call_id, {
   updated_fields: ["customer_name"],
   collection_state: {
     availability_checked: true,
+    booking_preference_collected: true,
     customer_name_collected: true,
     phone_collected: false,
-    first_visit_collected: false,
-    attention_confirmed: false,
+    first_visit_inferred: false,
     ready_for_final_confirmation: false
   },
   ready_for_final_confirmation: false,
@@ -195,10 +203,10 @@ sendToolOutput(socket, correctionCall.call_id, {
   updated_fields: ["customer_name"],
   collection_state: {
     availability_checked: true,
+    booking_preference_collected: true,
     customer_name_collected: true,
     phone_collected: false,
-    first_visit_collected: false,
-    attention_confirmed: false,
+    first_visit_inferred: false,
     ready_for_final_confirmation: false
   },
   ready_for_final_confirmation: false,
@@ -234,16 +242,16 @@ sendToolOutput(socket, changedAvailabilityCall.call_id, {
   },
   collection_state: {
     availability_checked: true,
+    booking_preference_collected: true,
     customer_name_collected: true,
     phone_collected: false,
-    first_visit_collected: false,
-    attention_confirmed: false,
+    first_visit_inferred: false,
     ready_for_final_confirmation: false
   },
   allowed_actions: ["answer_related_questions", "record_booking_details", "continue_conversation"]
 });
 
-sendUserText(socket, "名前は斎藤、電話番号は08037884404、以前も利用していて、注意事項と店舗ルールは確認済みです");
+sendUserText(socket, "電話番号は08037884404です");
 response = await createResponseAndWait(socket, events);
 const completeDetailsCall = findToolCall(response, "record_booking_details");
 if (!completeDetailsCall) {
@@ -253,21 +261,21 @@ const completeDetailsArgs = parseArguments(completeDetailsCall);
 if (
   completeDetailsArgs.availability_token !== changedAvailabilityToken ||
   !String(completeDetailsArgs.phone ?? "").replace(/\D/g, "").endsWith("4404") ||
-  completeDetailsArgs.first_visit !== false ||
-  completeDetailsArgs.attention_confirmed !== true
+  completeDetailsArgs.first_visit !== undefined ||
+  completeDetailsArgs.attention_confirmed !== undefined
 ) {
   throw new Error(`Complete booking detail arguments were incorrect: ${completeDetailsCall.arguments}`);
 }
 sendToolOutput(socket, completeDetailsCall.call_id, {
   ok: true,
   code: "DETAILS_COMPLETE",
-  updated_fields: ["phone", "first_visit", "attention_confirmed"],
+  updated_fields: ["phone"],
   collection_state: {
     availability_checked: true,
+    booking_preference_collected: true,
     customer_name_collected: true,
     phone_collected: true,
-    first_visit_collected: true,
-    attention_confirmed: true,
+    first_visit_inferred: false,
     ready_for_final_confirmation: true
   },
   ready_for_final_confirmation: true,
@@ -282,14 +290,28 @@ const prepareConfirmationArgs = parseArguments(prepareConfirmationCall);
 if (prepareConfirmationArgs.availability_token !== changedAvailabilityToken) {
   throw new Error(`Final confirmation used a stale availability token: ${prepareConfirmationCall.arguments}`);
 }
-sendToolOutput(socket, prepareConfirmationCall.call_id, buildSyntheticConfirmationOutput({
+const confirmationOutput = buildSyntheticConfirmationOutput({
   startsAt: confirmationStartsAt,
   confirmationToken: "verification-confirmation-token"
-}));
-const confirmationResponse = await createResponseAndWait(socket, events);
+});
+sendToolOutput(socket, prepareConfirmationCall.call_id, confirmationOutput);
+const confirmationResponse = await createResponseAndWait(socket, events, {
+  toolChoice: "none",
+  instructions: buildExactSpokenResponseInstructions(confirmationOutput.spoken_summary)
+});
 const confirmationReply = extractUserVisibleTranscript(confirmationResponse);
 if (!confirmationReply) {
   throw new Error(`Model did not speak the structured final confirmation: ${JSON.stringify(confirmationResponse?.output ?? [])}`);
+}
+if (normalizeExactSpeech(confirmationReply) !== normalizeExactSpeech(confirmationOutput.spoken_summary)) {
+  throw new Error(`Model changed the deterministic final confirmation: expected=${confirmationOutput.spoken_summary} actual=${confirmationReply}`);
+}
+if (confirmationReply.length > 100) {
+  throw new Error(`Model used an overlong final confirmation: ${confirmationReply}`);
+}
+assertRealtimeResponseBrevity(confirmationResponse, "final confirmation", 100);
+if (/(?:Room|ルーム|部屋|電話番号|下4桁|初めて|初回|再来|注意事項|店舗ルール)/iu.test(confirmationReply)) {
+  throw new Error(`Model exposed internal or removed confirmation fields: ${confirmationReply}`);
 }
 if (findToolCall(confirmationResponse, "create_reservation_hold")) {
   throw new Error("Model created a reservation before receiving the user's post-summary consent");
@@ -303,9 +325,8 @@ confirmationSession.reservationDraft.nominationIntent = false;
 confirmationSession.reservationDraft.therapistName = "みさき";
 confirmationSession.reservationDraft.assignedRoomName = "Room A";
 confirmationSession.reservationDraft.customerName = "斎藤";
-confirmationSession.reservationDraft.phone = "080-3788-4404";
-confirmationSession.reservationDraft.firstVisit = false;
-confirmationSession.reservationDraft.attentionConfirmed = true;
+  confirmationSession.reservationDraft.phone = "080-3788-4404";
+  confirmationSession.reservationDraft.firstVisit = false;
 markRealtimeAgentAssistantEvidence(confirmationSession, confirmationReply);
 if (!confirmationSession.realtimeAgentState.confirmationSpoken) {
   throw new Error(`Natural final confirmation did not satisfy the server evidence gate: ${confirmationReply}`);
@@ -393,6 +414,7 @@ console.log(JSON.stringify({
     prohibitedServiceBoundaryHeld: true,
     combinedNameAndCallerNumberRecordedOnce: true,
     collectedIdentityNotAskedAgain: true,
+    combinedConfirmationPassesEvidenceGate: true,
     structuredFinalConfirmationSpoken: true,
     noHoldBeforePostSummaryConsent: true,
     holdCreatedOnlyAfterExplicitConsent: true,
@@ -425,6 +447,8 @@ async function verifyCombinedIdentityScenario({ apiKey: key, model: modelName, v
       instructions: buildRealtimeAgentInstructions(identitySession),
       tools: buildRealtimeAgentTools(),
       tool_choice: "auto",
+      max_output_tokens: 512,
+      reasoning: { effort: "low" },
       audio: {
         output: { format: { type: "audio/pcmu" }, voice: voiceName }
       }
@@ -453,10 +477,10 @@ async function verifyCombinedIdentityScenario({ apiKey: key, model: modelName, v
       },
       collection_state: {
         availability_checked: true,
+        booking_preference_collected: true,
         customer_name_collected: false,
         phone_collected: false,
-        first_visit_collected: false,
-        attention_confirmed: false,
+        first_visit_inferred: false,
         ready_for_final_confirmation: false
       },
       allowed_actions: ["answer_related_questions", "record_booking_details", "continue_conversation"]
@@ -488,90 +512,73 @@ async function verifyCombinedIdentityScenario({ apiKey: key, model: modelName, v
       updated_fields: ["customer_name", "phone"],
       unchanged_fields: [],
       rejected_fields: [],
-      missing_fields: ["first_visit", "attention_confirmed"],
+      missing_fields: [],
       collection_state: {
         availability_checked: true,
+        booking_preference_collected: true,
         customer_name_collected: true,
         phone_collected: true,
-        first_visit_collected: false,
-        attention_confirmed: false,
-        ready_for_final_confirmation: false
+        first_visit_inferred: false,
+        ready_for_final_confirmation: true
       },
       do_not_repeat_collected_fields: ["customer_name", "phone"],
       response_policy: {
         do_not_echo_collected_fields: true,
         ask_one_missing_field_only: true
       },
-      ready_for_final_confirmation: false,
-      allowed_actions: ["answer_questions", "record_booking_details", "ask_about_any_missing_field"]
+      ready_for_final_confirmation: true,
+      allowed_actions: ["answer_questions", "prepare_final_confirmation", "search_store_knowledge"]
     });
-    identityResponse = await continueAfterCollectedIdentity(
-      identitySocket,
-      identityEvents,
-      await createResponseAndWait(identitySocket, identityEvents),
-      availabilityToken
-    );
-    const nextFollowUp = extractUserVisibleTranscript(identityResponse);
+    identityResponse = await createResponseAndWait(identitySocket, identityEvents);
+    const prepareCall = findToolCall(identityResponse, "prepare_final_confirmation");
+    if (!prepareCall) {
+      throw new Error(`Model did not move directly to final confirmation after identity collection: ${extractTranscript(identityResponse) || "no tool call"}`);
+    }
+    const prepareArgs = parseArguments(prepareCall);
+    if (prepareArgs.availability_token !== availabilityToken) {
+      throw new Error(`Combined identity scenario used a stale availability token: ${prepareCall.arguments}`);
+    }
+    const confirmationOutput = buildSyntheticConfirmationOutput({
+      startsAt: new Date(availabilityArgs.starts_at),
+      confirmationToken: "verification-combined-confirmation-token",
+      customerName: "佐藤"
+    });
+    sendToolOutput(identitySocket, prepareCall.call_id, confirmationOutput);
+    const finalResponse = await createResponseAndWait(identitySocket, identityEvents, {
+      toolChoice: "none",
+      instructions: buildExactSpokenResponseInstructions(confirmationOutput.spoken_summary)
+    });
+    const nextFollowUp = extractUserVisibleTranscript(finalResponse);
     if (!nextFollowUp) {
-      throw new Error(`Model did not continue after collecting identity: ${JSON.stringify(identityResponse?.output ?? [])}`);
+      throw new Error(`Model did not speak the final confirmation after collecting identity: ${JSON.stringify(finalResponse?.output ?? [])}`);
     }
-    if (
-      /(?:お名前|氏名).{0,20}(?:教えて|お聞かせ|名乗って|でよろしいですか)|(?:電話番号|下4桁).{0,24}(?:教えて|読み上げて|送ってよいですか|送ってもよいですか|許可してください|同意してください)/u.test(nextFollowUp)
-    ) {
-      throw new Error(`Model asked for already collected identity again: ${nextFollowUp}`);
+    if (normalizeExactSpeech(nextFollowUp) !== normalizeExactSpeech(confirmationOutput.spoken_summary)) {
+      throw new Error(`Model changed the combined identity confirmation: expected=${confirmationOutput.spoken_summary} actual=${nextFollowUp}`);
     }
-    if (
-      /(?:お名前|氏名).{0,30}(?:確認でき|お受けして|承知)|(?:電話番号|下4桁|今おかけの番号).{0,40}(?:確認でき|お受けして|承知|送信して)/u.test(nextFollowUp)
-    ) {
-      throw new Error(`Model echoed already collected identity instead of moving on: ${nextFollowUp}`);
+    if (nextFollowUp.length > 100) {
+      throw new Error(`Model used an overlong combined identity confirmation: ${nextFollowUp}`);
+    }
+    if (/(?:お名前|氏名).{0,20}(?:教えて|お聞かせ|名乗って)|(?:電話番号|下4桁).{0,24}(?:教えて|読み上げて|許可|同意)|(?:初めて|初回|再来|注意事項|店舗ルール)/u.test(nextFollowUp)) {
+      throw new Error(`Model repeated collected or removed fields: ${nextFollowUp}`);
+    }
+    const confirmationSession = createPhoneSession();
+    confirmationSession.realtimeAgentState = createRealtimeAgentState();
+    confirmationSession.realtimeAgentState.expectedConfirmationText = "internal-evidence-only";
+    confirmationSession.reservationDraft.startsAt = new Date(availabilityArgs.starts_at);
+    confirmationSession.reservationDraft.course = storeContext.courses[1];
+    confirmationSession.reservationDraft.nominationIntent = false;
+    confirmationSession.reservationDraft.therapistName = "あおい";
+    confirmationSession.reservationDraft.assignedRoomName = "Room B";
+    confirmationSession.reservationDraft.customerName = "佐藤";
+    confirmationSession.reservationDraft.phone = "080-3788-4404";
+    markRealtimeAgentAssistantEvidence(confirmationSession, nextFollowUp);
+    if (!confirmationSession.realtimeAgentState.confirmationSpoken) {
+      throw new Error(`Combined identity confirmation omitted a required field: ${nextFollowUp}`);
     }
     return { nextFollowUp };
   } finally {
     identitySocket.close(1000, "combined identity verification complete");
   }
-}
-
-async function continueAfterCollectedIdentity(ws, queue, initialResponse, availabilityToken) {
-  let current = initialResponse;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    if (extractUserVisibleTranscript(current)) return current;
-    const calls = (current?.output ?? []).filter((item) => item?.type === "function_call");
-    if (!calls.length) return current;
-    for (const call of calls) {
-      const args = parseArguments(call);
-      if (call.name === "record_booking_details") {
-        if (args.customer_name !== undefined || args.phone !== undefined || args.use_caller_number !== undefined) {
-          throw new Error(`Model resent already collected identity fields: ${call.arguments}`);
-        }
-      } else if (call.name !== "get_reception_state") {
-        throw new Error(`Model called an unexpected tool after identity collection: ${call.name}`);
-      }
-      sendToolOutput(ws, call.call_id, {
-        ok: true,
-        code: "STATE_READY",
-        state: {
-          availability_checked: true,
-          customer_name: "佐藤",
-          phone_last4: "4404",
-          first_visit: null,
-          attention_confirmed: false,
-          ready_for_final_confirmation: false
-        },
-        collection_state: {
-          availability_checked: true,
-          customer_name_collected: true,
-          phone_collected: true,
-          first_visit_collected: false,
-          attention_confirmed: false,
-          ready_for_final_confirmation: false
-        },
-        do_not_repeat_collected_fields: ["customer_name", "phone"],
-        allowed_actions: ["answer_questions", "record_booking_details", "ask_about_any_missing_field"]
-      });
-    }
-    current = await createResponseAndWait(ws, queue);
-  }
-  return current;
 }
 
 async function continueUntilVisibleSpeech(ws, queue, initialResponse, options) {
@@ -597,19 +604,18 @@ async function continueUntilVisibleSpeech(ws, queue, initialResponse, options) {
           availability_checked: true,
           course_duration_min: 90,
           booking_type: "free",
+          booking_preference_confirmed: true,
           therapist_name: "みさき",
           customer_name: options.customerName ?? null,
           phone_last4: null,
-          first_visit: null,
-          attention_confirmed: false,
           ready_for_final_confirmation: false
         },
         collection_state: {
           availability_checked: true,
+          booking_preference_collected: true,
           customer_name_collected: Boolean(options.customerName),
           phone_collected: false,
-          first_visit_collected: false,
-          attention_confirmed: false,
+          first_visit_inferred: false,
           ready_for_final_confirmation: false
         },
         allowed_actions: ["answer_questions", "record_booking_details", "ask_about_any_missing_field"]
@@ -642,7 +648,7 @@ function sendToolOutput(ws, callId, output) {
   }));
 }
 
-function buildSyntheticConfirmationOutput({ startsAt, confirmationToken }) {
+function buildSyntheticConfirmationOutput({ startsAt, confirmationToken, customerName = "斎藤" }) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("ja-JP", {
     timeZone: "Asia/Tokyo",
     month: "numeric",
@@ -651,10 +657,12 @@ function buildSyntheticConfirmationOutput({ startsAt, confirmationToken }) {
     minute: "numeric",
     hour12: false
   }).formatToParts(startsAt).map((part) => [part.type, part.value]));
+  const spokenSummary = `${Number(parts.month)}月${Number(parts.day)}日${Number(parts.hour)}時${Number(parts.minute) ? `${Number(parts.minute)}分` : ""}、90分スタンダードコース、17,000円、フリー、${customerName}様で仮受付します。よろしいですか？`;
   return {
     ok: true,
     code: "FINAL_CONFIRMATION_READY",
     confirmation_token: confirmationToken,
+    spoken_summary: spokenSummary,
     confirmation: {
       starts_at: formatJstIso(startsAt),
       starts_at_label: `${Number(parts.month)}月${Number(parts.day)}日${Number(parts.hour)}時${Number(parts.minute) ? `${Number(parts.minute)}分` : ""}`,
@@ -667,10 +675,10 @@ function buildSyntheticConfirmationOutput({ startsAt, confirmationToken }) {
       booking_type: "free",
       therapist_name: "みさき",
       room_name: "Room A",
-      customer_name: "斎藤",
+      customer_name: customerName,
       phone_last4: "4404",
       first_visit: "repeat",
-      attention_confirmed: true,
+      first_visit_source: "phone_history",
       reservation_status_after_creation: "tentative"
     },
     required_confirmation_fields: [
@@ -679,16 +687,24 @@ function buildSyntheticConfirmationOutput({ startsAt, confirmationToken }) {
       "course_duration_min",
       "total_price_yen",
       "booking_type",
-      "therapist_name",
-      "room_name",
       "customer_name",
-      "phone_last4",
-      "first_visit",
       "reservation_status_after_creation"
     ],
-    required_user_action: "summarize_naturally_then_wait_for_explicit_confirmation",
-    allowed_actions: ["speak_confirmation_summary_and_wait", "answer_question_before_confirmation"]
+    required_user_action: "speak_spoken_summary_exactly_once_then_wait_for_explicit_confirmation",
+    allowed_actions: ["speak_exact_confirmation_summary_and_wait", "answer_question_before_confirmation"]
   };
+}
+
+function buildExactSpokenResponseInstructions(text) {
+  return [
+    "次のutteranceの値だけを、日本語で一度だけ、そのまま読み上げてください。",
+    "言い換え、要約、省略、補足、前置き、後置き、ツール呼び出しは禁止です。",
+    JSON.stringify({ utterance: text })
+  ].join("\n");
+}
+
+function normalizeExactSpeech(text) {
+  return String(text ?? "").normalize("NFKC").replace(/\s+/gu, "").trim();
 }
 
 function formatJstIso(value) {
@@ -729,7 +745,11 @@ async function createResponseAndWait(ws, queue, options = {}) {
       await new Promise((resolve) => setTimeout(resolve, retryDelayMsFromMessage(error.message)));
       continue;
     }
-    throw new Error(`Realtime response did not complete: ${JSON.stringify(status)}`);
+    throw new Error(`Realtime response did not complete: ${JSON.stringify({
+      status,
+      transcript: extractTranscript(event.response),
+      output: event.response?.output ?? []
+    })}`);
   }
   throw new Error("Realtime response retry limit exceeded");
 }
@@ -793,6 +813,21 @@ function extractUserVisibleTranscript(response) {
     .trim();
 }
 
+function assertRealtimeResponseBrevity(response, label, maxChars) {
+  const transcript = extractTranscript(response).replace(/\s+/g, "");
+  if (transcript.length > maxChars) {
+    throw new Error(`Model exceeded the ${label} response budget (${transcript.length}/${maxChars}): ${extractTranscript(response)}`);
+  }
+  const commentary = (response?.output ?? [])
+    .filter((item) => item?.phase === "commentary")
+    .flatMap((item) => item?.content ?? [])
+    .map((content) => String(content?.transcript ?? content?.text ?? "").trim())
+    .filter(Boolean);
+  if (commentary.length) {
+    throw new Error(`Model used an unnecessary commentary preamble for ${label}: ${commentary.join(" / ")}`);
+  }
+}
+
 function createEventQueue(ws) {
   const backlog = [];
   const waiters = [];
@@ -800,6 +835,7 @@ function createEventQueue(ws) {
   const transcriptWaiters = new Map();
   const recentEvents = [];
   let currentResponseId = "";
+  let fatalError;
   ws.on("message", (raw) => {
     let event;
     try {
@@ -807,11 +843,17 @@ function createEventQueue(ws) {
     } catch {
       return;
     }
-    recentEvents.push({ type: event.type, responseId: event.response_id ?? event.response?.id ?? null });
+    recentEvents.push({
+      type: event.type,
+      response_id: event.response_id ?? event.response?.id ?? null,
+      status: event.response?.status ?? null,
+      error_code: event.error?.code ?? null,
+      error_message: event.error?.message ?? null
+    });
     if (recentEvents.length > 80) recentEvents.shift();
     if (event.type === "error" && event.error?.code !== "rate_limit_exceeded") {
-      const error = new Error(event.error?.message ?? "OpenAI Realtime error");
-      for (const waiter of waiters.splice(0)) waiter.reject(error);
+      fatalError = new Error(`OpenAI Realtime error${event.error?.code ? ` (${event.error.code})` : ""}: ${event.error?.message ?? "unknown error"}`);
+      for (const waiter of waiters.splice(0)) waiter.reject(fatalError);
       return;
     }
     if (event.type === "response.created") currentResponseId = String(event.response?.id ?? "");
@@ -852,6 +894,7 @@ function createEventQueue(ws) {
       });
     },
     waitFor(predicate, timeoutMs) {
+      if (fatalError) return Promise.reject(fatalError);
       const index = backlog.findIndex(predicate);
       if (index >= 0) return Promise.resolve(backlog.splice(index, 1)[0]);
       return new Promise((resolve, reject) => {
@@ -860,7 +903,7 @@ function createEventQueue(ws) {
         const timeout = setTimeout(() => {
           const position = waiters.indexOf(waiter);
           if (position >= 0) waiters.splice(position, 1);
-          reject(new Error("OpenAI Realtime model verification timeout"));
+          reject(new Error(`OpenAI Realtime model verification timeout: ${JSON.stringify(recentEvents.slice(-12))}`));
         }, timeoutMs);
         waiter.resolve = (value) => {
           clearTimeout(timeout);

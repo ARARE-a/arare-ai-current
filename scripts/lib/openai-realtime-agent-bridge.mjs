@@ -15,6 +15,7 @@ export class OpenAiRealtimeAgentBridge {
     this.reasoningEffort = normalizeReasoningEffort(options.reasoningEffort);
     this.commentaryAudioEnabled = options.commentaryAudioEnabled === true;
     this.vadEagerness = options.vadEagerness ?? "medium";
+    this.maxOutputTokens = clampNumber(options.maxOutputTokens, 64, 512, 512);
     this.manualTurnControl = options.manualTurnControl !== false;
     this.bargeInDelayMs = clampNumber(options.bargeInDelayMs, 250, 1200, 450);
     this.shortBackchannelMaxMs = clampNumber(options.shortBackchannelMaxMs, 250, 1600, 900);
@@ -125,6 +126,7 @@ export class OpenAiRealtimeAgentBridge {
         instructions: this.instructions,
         tools: this.tools,
         tool_choice: "auto",
+        max_output_tokens: this.maxOutputTokens,
         reasoning: { effort: this.reasoningEffort },
         audio: {
           input: {
@@ -184,7 +186,7 @@ export class OpenAiRealtimeAgentBridge {
 
   startGreeting() {
     this.requestResponse(
-      "電話受付として短く自然に挨拶し、相手の要件を自由に伺ってください。定型文を読む必要はありません。",
+      "『お電話ありがとうございます。ARARE AIです。ご希望をどうぞ。』とだけ話してください。説明や案内の追加は禁止です。",
       { toolChoice: "none" }
     );
   }
@@ -413,6 +415,7 @@ export class OpenAiRealtimeAgentBridge {
     this.toolExecutionActive = true;
     let executed = 0;
     let terminalResultSeen = false;
+    let exactSpokenFollowUp;
     try {
       for (const item of toolCalls) {
         const callId = String(item.call_id ?? "");
@@ -464,6 +467,19 @@ export class OpenAiRealtimeAgentBridge {
           this.terminalPending = true;
           terminalResultSeen = true;
         }
+        if (
+          item.name === "prepare_final_confirmation" &&
+          result?.ok === true &&
+          result?.code === "FINAL_CONFIRMATION_READY"
+        ) {
+          const spokenSummary = normalizeExactSpokenSummary(result?.spoken_summary);
+          if (spokenSummary) {
+            exactSpokenFollowUp = {
+              name: item.name,
+              text: spokenSummary
+            };
+          }
+        }
         this.log("openai_realtime_agent_tool_completed", {
           name: item.name,
           callId,
@@ -491,6 +507,18 @@ export class OpenAiRealtimeAgentBridge {
       }
       if (this.pendingTurnResponse) {
         this.flushPendingTurnResponse();
+        return;
+      }
+      if (exactSpokenFollowUp) {
+        this.consecutiveToolTurns = 0;
+        this.log("openai_realtime_agent_exact_spoken_follow_up", {
+          name: exactSpokenFollowUp.name,
+          textLength: exactSpokenFollowUp.text.length
+        });
+        this.requestResponse(
+          buildExactSpokenResponseInstruction(exactSpokenFollowUp.text),
+          { toolChoice: "none" }
+        );
         return;
       }
       this.consecutiveToolTurns += 1;
@@ -937,6 +965,24 @@ function isMeaningfulPartialSpeech(value) {
     .replace(/[\s。、！？!?.,]/g, "");
   if (text.length < 2 || isBriefBackchannel(text)) return false;
   return /[\p{L}\p{N}]/u.test(text);
+}
+
+function normalizeExactSpokenSummary(value) {
+  const text = String(value ?? "")
+    .normalize("NFKC")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (!text || text.length > 500) return undefined;
+  return text;
+}
+
+function buildExactSpokenResponseInstruction(text) {
+  return [
+    "次のutteranceの値だけを、日本語で一度だけ、そのまま読み上げてください。",
+    "言い換え、要約、省略、補足、前置き、後置き、ツール呼び出しは禁止です。",
+    JSON.stringify({ utterance: text })
+  ].join("\n");
 }
 
 function clampNumber(value, min, max, fallback) {
