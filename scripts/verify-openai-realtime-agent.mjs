@@ -108,6 +108,9 @@ assert.equal(sessionUpdate.session.reasoning.effort, "low");
 assert.equal(sessionUpdate.session.audio.input.turn_detection.create_response, false);
 assert.equal(sessionUpdate.session.audio.input.turn_detection.interrupt_response, false);
 assert.equal(sessionUpdate.session.max_output_tokens, 512);
+assert.equal(sessionUpdate.session.truncation.type, "retention_ratio");
+assert.equal(sessionUpdate.session.truncation.retention_ratio, 0.8);
+assert.equal(sessionUpdate.session.truncation.token_limits.post_instructions, 1800);
 assert.equal(sessionUpdate.session.audio.output.voice, "cedar");
 assert.deepEqual(sessionUpdate.session.tools, tools);
 

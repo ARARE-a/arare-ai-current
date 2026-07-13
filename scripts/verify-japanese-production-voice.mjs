@@ -43,33 +43,47 @@ const transcript = [];
 try {
   const greeting = await conversation.nextResponse();
   record("initial_greeting", "(setup)", greeting, /(AI|受付|予約|お電話)/u);
+  assertConciseAndSafe("initial_greeting", greeting);
 
-  const timeFragment = await conversation.prompt("20とかいただきます");
-  record("repaired_time_fragment_to_date", "20とかいただきます", timeFragment, /(日にち|今日|明日|お日にち)/u);
+  const courseQuestion = "60分と90分は何が違いますか？";
+  const courseAnswer = joinResponses(await conversation.promptAndCollect(courseQuestion));
+  record(
+    "course_question_uses_registered_facts",
+    courseQuestion,
+    courseAnswer,
+    /60分.*12[,，]?000円.*90分.*17[,，]?000円/u
+  );
+  assertConciseAndSafe("course_question_uses_registered_facts", courseAnswer);
 
-  const availability = await conversation.prompt("明日です");
-  record("date_to_name", "明日です", availability, /(お名前|名字)/u);
+  const bookingRequest = "明後日の23時から60分、フリーでお願いします。";
+  const availability = joinResponses(await conversation.promptAndCollect(bookingRequest));
+  record(
+    "datetime_duration_and_preference_to_identity",
+    bookingRequest,
+    availability,
+    /(確認|空き|案内|名前|名字|23時|60分)/u
+  );
+  assertConciseAndSafe("datetime_duration_and_preference_to_identity", availability);
 
-  const name = await conversation.prompt("佐藤です");
-  record("name_to_caller_phone", "佐藤です", name, /(今おかけの番号|下4桁|ショートメッセージ)/u);
+  const identityRequest = "名前は佐藤です。SMSは今かけている番号で大丈夫です。";
+  let finalSummary = joinResponses(await conversation.promptAndCollect(identityRequest));
+  if (!isCompactFinalSummary(finalSummary)) {
+    const summaryRequest = "予約内容を短く確認してください。";
+    finalSummary = joinResponses(await conversation.promptAndCollect(summaryRequest));
+  }
+  record("identity_to_compact_final_summary", identityRequest, finalSummary, /23時.*60分.*12[,，]?000円.*フリー.*佐藤/u);
+  assert.match(finalSummary, /(よろしい|間違いない|合って)/u, "Final summary must request explicit confirmation");
+  assertConciseAndSafe("identity_to_compact_final_summary", finalSummary, { maxLength: 220 });
 
-  const callerNumber = await conversation.prompt("はい大丈夫です");
-  record("caller_number_selected", "はい大丈夫です", callerNumber, /(コース|60分|90分|120分)/u);
+  const repeatedSummaryRequest = "確認内容をもう一度、短くお願いします。";
+  const repeatedSummary = joinResponses(await conversation.promptAndCollect(repeatedSummaryRequest));
+  record("repeat_summary", repeatedSummaryRequest, repeatedSummary, /23時.*60分.*12[,，]?000円.*フリー.*佐藤/u);
+  assertConciseAndSafe("repeat_summary", repeatedSummary, { maxLength: 220 });
 
-  const course = await conversation.prompt("60分でお願いします");
-  record("course_to_visit_history", "60分でお願いします", course, /(初めて|以前|利用)/u);
-
-  const visit = await conversation.prompt("以前もある");
-  record("repeat_visit_to_attention", "以前もある", visit, /(注意事項|店舗ルール|確認)/u);
-
-  const finalSummary = await conversation.prompt("確認した");
-  record("attention_to_final_summary", "確認した", finalSummary, /(60分|佐藤).*(はい|内容|合って)/u);
-
-  const repeatedSummary = await conversation.prompt("確認内容をもう一度言ってください");
-  record("repeat_summary", "確認内容をもう一度言ってください", repeatedSummary, /(60分|佐藤).*(はい|内容|合って)/u);
-
-  const changedCourse = await conversation.prompt("60分から90分に変更して");
-  record("course_change_and_recheck", "60分から90分に変更して", changedCourse, /(90分).*(変更|空き|確認)/u);
+  const changedCourseRequest = "60分から90分に変更してください。";
+  const changedCourse = joinResponses(await conversation.promptAndCollect(changedCourseRequest));
+  record("course_change_requires_recheck", changedCourseRequest, changedCourse, /(90分).*(変更|空き|確認|案内)/u);
+  assertConciseAndSafe("course_change_requires_recheck", changedCourse);
 } finally {
   conversation.close();
 }
@@ -105,6 +119,23 @@ console.log(
 function record(step, input, response, expectedPattern) {
   assert.match(response, expectedPattern, `${step} returned an unexpected response: ${response}`);
   transcript.push({ step, input, response });
+}
+
+function assertConciseAndSafe(step, response, { maxLength = 180 } = {}) {
+  assert.ok(response.length <= maxLength, `${step} was too long (${response.length} chars): ${response}`);
+  assert.doesNotMatch(
+    response,
+    /(次に進め|内部|ツール|必須項目|不足して|処理できません|入力してください|初めてですか|以前の利用|注意事項を確認)/u,
+    `${step} leaked internal state or an obsolete turn: ${response}`
+  );
+}
+
+function joinResponses(responses) {
+  return responses.map((value) => String(value ?? "").trim()).filter(Boolean).join(" ");
+}
+
+function isCompactFinalSummary(response) {
+  return /23時/u.test(response) && /60分/u.test(response) && /12[,，]?000円/u.test(response) && /フリー/u.test(response) && /佐藤/u.test(response);
 }
 
 async function fetchSignedVoiceTwiml() {
@@ -189,7 +220,7 @@ function openConversationRelay({ url, signature, parameters }) {
     });
   });
 
-  function nextResponse() {
+  function nextResponse(waitTimeoutMs = timeoutMs) {
     return opened.then(
       () =>
         new Promise((resolve, reject) => {
@@ -204,8 +235,8 @@ function openConversationRelay({ url, signature, parameters }) {
           const timer = setTimeout(() => {
             const index = waiters.findIndex((item) => item.resolve === wrappedResolve);
             if (index !== -1) waiters.splice(index, 1);
-            reject(new Error(`Production ConversationRelay response timed out after ${timeoutMs}ms`));
-          }, timeoutMs);
+            reject(new Error(`Production ConversationRelay response timed out after ${waitTimeoutMs}ms`));
+          }, waitTimeoutMs);
           const wrappedResolve = (value) => {
             clearTimeout(timer);
             resolve(value);
@@ -227,6 +258,18 @@ function openConversationRelay({ url, signature, parameters }) {
       await opened;
       socket.send(JSON.stringify({ type: "prompt", voicePrompt: text, lang: "ja-JP", last: true }));
       return nextResponse();
+    },
+    async promptAndCollect(text, { idleTimeoutMs = 2500, maxResponses = 4 } = {}) {
+      const responses = [await this.prompt(text)];
+      while (responses.length < maxResponses) {
+        try {
+          responses.push(await nextResponse(idleTimeoutMs));
+        } catch (error) {
+          if (/response timed out/u.test(String(error?.message ?? error))) break;
+          throw error;
+        }
+      }
+      return responses;
     },
     close() {
       if (socket.readyState === WebSocket.OPEN) socket.close(1000, "production regression complete");

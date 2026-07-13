@@ -45,7 +45,10 @@ session.storeContext = {
     setting: { attentionNotes: "来店前に店舗ルールをご確認ください。", ngWords: ["禁止行為"] },
     aiSetting: { tone: "落ち着いた自然な受付", forbiddenAnswers: [], escalationKeywords: ["返金"] }
   },
-  courses: [{ id: "course-90", name: "90分スタンダードコース", durationMin: 90, price: 17000 }],
+  courses: [
+    { id: "course-90", name: "90分スタンダードコース", durationMin: 90, price: 17000 },
+    { id: "course-60", name: "60分リラックスコース", durationMin: 60, price: 12000 }
+  ],
   options: [],
   therapists: [{ id: "therapist-1", displayName: "みさき" }],
   rooms: [{ id: "room-1", name: "Room A" }],
@@ -98,7 +101,8 @@ assert.match(instructions, /通常の返答は一文/);
 assert.match(instructions, /質問された時だけ詳しく/);
 assert.match(instructions, /聞き返すのは同じ項目につき一度まで/);
 assert.match(instructions, /初回・再来と注意事項確認を独立した質問にしてはいけません/);
-assert.match(instructions, /登録済みの時間と料金を具体的に答え/);
+assert.match(instructions, /比較対象として挙げられた全コースの時間と料金を一度に答え/);
+assert.match(instructions, /聞かれていない禁止事項や性的サービスの注意書きを自発的に付けません/);
 assert.match(instructions, /ツール出力は原則として読み上げ原稿ではなく/);
 assert.match(instructions, /prepare_final_confirmationがspoken_summaryを返した時/);
 assert.match(instructions, /部屋、内部担当、電話番号、来店歴は読み上げません/);
@@ -107,6 +111,14 @@ assert.match(instructions, /先へ進めません.*禁止/);
 assert.match(instructions, /通話開始時刻（日本時間）/);
 assert.match(instructions, /相対時刻/);
 assert.doesNotMatch(instructions, /next_question|message_for_customer|spoken_reply/);
+session.conversationTurns = [{ role: "CUSTOMER", content: "60分と90分は何が違いますか？" }];
+const courseKnowledge = await searchRealtimeAgentStoreKnowledge(session, { query: "90分コース", limit: 3 });
+assert.deepEqual(
+  courseKnowledge.registered_course_facts.map((course) => course.duration_min).sort((left, right) => left - right),
+  [60, 90]
+);
+assert.equal(courseKnowledge.response_policy.answer_all_registered_course_facts, true);
+assert.equal(courseKnowledge.response_policy.omit_unrequested_safety_disclaimers, true);
 assert.equal(classifyRealtimeAgentFailure(new Error("insufficient_quota")), "OPENAI_INSUFFICIENT_QUOTA");
 assert.equal(classifyRealtimeAgentFailure(new Error("rate_limit_exceeded")), "OPENAI_RATE_LIMIT");
 const outageFallbackXml = buildRealtimeAgentOutageFallbackXml();

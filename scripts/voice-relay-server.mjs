@@ -57,6 +57,18 @@ const realtimeAgentMaxOutputTokens = boundedNumberEnv(
   64,
   512
 );
+const realtimeAgentTruncationRetentionRatio = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_TRUNCATION_RETENTION_RATIO",
+  0.8,
+  0.5,
+  0.95
+);
+const realtimeAgentTruncationPostInstructionsTokens = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_TRUNCATION_POST_INSTRUCTIONS_TOKENS",
+  1800,
+  1000,
+  8000
+);
 const realtimeAgentResponseWatchdogMs = Math.max(
   6000,
   Number(process.env.OPENAI_REALTIME_AGENT_RESPONSE_WATCHDOG_MS ?? 12000)
@@ -388,9 +400,12 @@ const server = http.createServer(async (request, response) => {
           preambleAudioEnabled: realtimeAgentPreambleAudioEnabled,
           vadEagerness: realtimeAgentVadEagerness,
           maxOutputTokens: realtimeAgentMaxOutputTokens,
+          truncationRetentionRatio: realtimeAgentTruncationRetentionRatio,
+          truncationPostInstructionsTokens: realtimeAgentTruncationPostInstructionsTokens,
+          boundedConversationContextReady: true,
           responseWatchdogMs: realtimeAgentResponseWatchdogMs,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 10,
+          conversationFlowVersion: 12,
           scriptedReplyPrimary: false,
           manualTurnControlReady: realtimeAgentManualTurnControl,
           automaticVadResponseDisabled: realtimeAgentManualTurnControl,
@@ -431,6 +446,7 @@ const server = http.createServer(async (request, response) => {
           naturalReceptionPromptReady: true,
           autonomousConversationReady: true,
           structuredToolFactsReady: true,
+          completeCourseComparisonFactsReady: true,
           fixedToolUtterancesDisabled: true,
           storeKnowledgeToolReady: true,
           freeTalkSideTopicReady: true,
@@ -1079,6 +1095,8 @@ agentWss.on("connection", (twilioSocket) => {
         commentaryAudioEnabled: realtimeAgentPreambleAudioEnabled,
         vadEagerness: realtimeAgentVadEagerness,
         maxOutputTokens: realtimeAgentMaxOutputTokens,
+        truncationRetentionRatio: realtimeAgentTruncationRetentionRatio,
+        truncationPostInstructionsTokens: realtimeAgentTruncationPostInstructionsTokens,
         manualTurnControl: realtimeAgentManualTurnControl,
         bargeInDelayMs: realtimeAgentBargeInDelayMs,
         shortBackchannelMaxMs: realtimeAgentShortBackchannelMaxMs,
@@ -8920,7 +8938,8 @@ function buildRealtimeAgentInstructions(session) {
     "# 最短予約レーン",
     "予約に必要なのは、希望日時、コース時間、フリーまたは指名、氏名、SMS送信先、最後の予約内容同意です。初回・再来と注意事項確認を独立した質問にしてはいけません。",
     "希望日時だけでは空きを確定できないため、コース時間がなければ一度だけ尋ねます。登録コースを聞かれた時だけ、登録済みの時間と料金を短く案内します。",
-    "コースの違いを聞かれた時は、登録済みの時間と料金を具体的に答え、『違います』だけで終えません。施術内容の違いが未登録なら創作せず、その点だけ未登録と伝えます。",
+    "コースの違いを聞かれた時は、比較対象として挙げられた全コースの時間と料金を一度に答え、片方だけ説明してはいけません。施術内容の違いは登録説明がある範囲だけを一文で比較し、未登録なら創作せず、その点だけ未登録と伝えます。",
+    "通常コースの質問では、聞かれていない禁止事項や性的サービスの注意書きを自発的に付けません。安全上の質問を受けた時だけ短く回答します。",
     "指名希望がまだ不明でも、空き確認はフリーを仮条件として実行できます。空きが分かった後、最終確認前に『指名はありますか』と一度だけ尋ねます。後から指名が出たら、その条件で空きを再確認します。",
     "氏名は一度だけ尋ねます。聞き取りづらければ『名字をゆっくりお願いします』と一度だけ聞き直し、同じ説明を繰り返しません。",
     callerLast4
@@ -8931,7 +8950,7 @@ function buildRealtimeAgentInstructions(session) {
     "",
     "# 発話とツール",
     "DBの空き確認または最短検索の直前だけ『確認しますね』と一度話して構いません。照会後は『確認できました』を重ねず、結果をすぐ伝えます。",
-    "ツール出力は原則として読み上げ原稿ではなく、事実、制約、許可された次の行動です。結果を理解したうえで、会話に合う自然な応答、質問、別ツールの実行をあなた自身で選んでください。",
+    "ツール出力は原則として読み上げ原稿ではなく、事実、制約、許可された次の行動です。結果を理解したうえで、会話に合う自然な応答、質問、別ツールの実行をあなた自身で選んでください。response_policyがある場合は、対象漏れ、長さ、禁止事項に関する制約を守ります。",
     "唯一の例外として、prepare_final_confirmationがspoken_summaryを返した時は、その一文だけを省略・言い換え・追加なしで一度読み上げ、利用者の返答を待ちます。",
     "保持情報に自信がなければget_reception_stateを使い、店舗固有の質問で本文が必要ならsearch_store_knowledgeを使います。検索結果がない内容は推測せず、未確認であることを正直に伝えます。",
     "ツール名、内部トークン、JSON、システム、プロンプト、処理手順を利用者へ話してはいけません。",
@@ -9236,6 +9255,9 @@ async function searchRealtimeAgentStoreKnowledge(session, args) {
   }
   const context = await ensureStoreReceptionContext(session);
   const limit = Math.max(1, Math.min(5, Number(args?.limit ?? 3)));
+  const callerQuestion = getRealtimeAgentLastCustomerText(session);
+  const courseQuestionText = `${callerQuestion} ${query}`.trim();
+  const registeredCourseFacts = buildRealtimeCourseKnowledgeFacts(context?.courses ?? [], courseQuestionText);
   const candidates = [
     ...(context?.knowledge ?? []).map((item) => ({
       type: "knowledge",
@@ -9274,6 +9296,15 @@ async function searchRealtimeAgentStoreKnowledge(session, args) {
     query,
     found: matches.length > 0,
     matches,
+    registered_course_facts: registeredCourseFacts,
+    response_policy: registeredCourseFacts.length
+      ? {
+          answer_all_registered_course_facts: true,
+          omit_unrequested_safety_disclaimers: true,
+          max_spoken_sentences: 2,
+          max_spoken_characters: 100
+        }
+      : undefined,
     searched_sources: {
       knowledge: context?.knowledge?.length ?? 0,
       faq: context?.faqs?.length ?? 0,
@@ -9283,6 +9314,21 @@ async function searchRealtimeAgentStoreKnowledge(session, args) {
       ? ["answer_using_returned_facts", "ask_follow_up_if_ambiguous", "continue_original_topic"]
       : ["explain_not_registered", "ask_for_clarification", "offer_store_follow_up", "continue_original_topic"]
   };
+}
+
+function buildRealtimeCourseKnowledgeFacts(courses, question) {
+  const activeCourses = Array.isArray(courses) ? courses.filter(Boolean) : [];
+  const normalized = normalizeJapaneseSpeech(question);
+  const isCourseQuestion = /(コース|料金|値段|価格|何分|違い|内容|施術)/u.test(normalized);
+  if (!isCourseQuestion) return [];
+  const explicitlyMentioned = activeCourses.filter((course) => realtimeTextSupportsCourse(normalized, course));
+  const selected = explicitlyMentioned.length ? explicitlyMentioned : activeCourses;
+  return selected.map((course) => ({
+    name: course.name,
+    duration_min: Number(course.durationMin),
+    price_yen: Number(course.price),
+    registered_description: sanitizeCourseDescriptionForSpeech(course.description) || null
+  }));
 }
 
 function truncateRealtimeKnowledgeText(value) {

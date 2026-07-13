@@ -11,7 +11,8 @@ const {
   buildRealtimeAgentTools,
   createPhoneSession,
   createRealtimeAgentState,
-  markRealtimeAgentAssistantEvidence
+  markRealtimeAgentAssistantEvidence,
+  searchRealtimeAgentStoreKnowledge
 } = await import("./voice-relay-server.mjs");
 
 const apiKey = process.env.OPENAI_API_KEY;
@@ -59,6 +60,11 @@ await updateSessionAndWait(socket, events, {
   tools: buildRealtimeAgentTools(),
   tool_choice: "auto",
   max_output_tokens: 512,
+  truncation: {
+    type: "retention_ratio",
+    retention_ratio: 0.8,
+    token_limits: { post_instructions: 1800 }
+  },
   reasoning: { effort: "low" },
   audio: {
     output: { format: { type: "audio/pcmu" }, voice }
@@ -133,19 +139,18 @@ sendUserText(socket, "その前に少し聞きたいんですが、今日は暑�
 response = await createResponseAndWait(socket, events);
 const knowledgeCall = findToolCall(response, "search_store_knowledge");
 if (knowledgeCall) {
-  sendToolOutput(socket, knowledgeCall.call_id, {
-    ok: true,
-    code: "KNOWLEDGE_FOUND",
-    found: true,
-    matches: [{
-      type: "knowledge",
-      title: "コースの違い",
-      category: "コース",
-      content: "60分は短時間向け、90分はゆっくり過ごしたい方向けです。",
-      relevance: 1
-    }],
-    allowed_actions: ["answer_using_returned_facts", "continue_original_topic"]
+  session.conversationTurns.push({
+    role: "CUSTOMER",
+    content: "その前に少し聞きたいんですが、今日は暑いですね。60分と90分ってどう違うんですか？"
   });
+  const knowledgeOutput = await searchRealtimeAgentStoreKnowledge(session, parseArguments(knowledgeCall));
+  const comparedDurations = (knowledgeOutput.registered_course_facts ?? [])
+    .map((course) => Number(course.duration_min))
+    .sort((left, right) => left - right);
+  if (comparedDurations.join(",") !== "60,90") {
+    throw new Error(`Course comparison facts were incomplete: ${JSON.stringify(knowledgeOutput)}`);
+  }
+  sendToolOutput(socket, knowledgeCall.call_id, knowledgeOutput);
   response = await createResponseAndWait(socket, events);
 }
 const sideTopicReply = extractUserVisibleTranscript(response);
@@ -448,6 +453,11 @@ async function verifyCombinedIdentityScenario({ apiKey: key, model: modelName, v
       tools: buildRealtimeAgentTools(),
       tool_choice: "auto",
       max_output_tokens: 512,
+      truncation: {
+        type: "retention_ratio",
+        retention_ratio: 0.8,
+        token_limits: { post_instructions: 1800 }
+      },
       reasoning: { effort: "low" },
       audio: {
         output: { format: { type: "audio/pcmu" }, voice: voiceName }
@@ -771,6 +781,9 @@ async function updateSessionAndWait(ws, queue, sessionConfig) {
 
 function retryDelayMsFromMessage(message) {
   const text = String(message ?? "");
+  if (/(?:tokens per min|TPM)/i.test(text)) {
+    return 61000;
+  }
   const minuteSecondMatch = text.match(/try again in (?:(\d+)m)?([0-9.]+)s/i);
   if (minuteSecondMatch) {
     const waitMs = (Number(minuteSecondMatch[1] ?? 0) * 60 + Number(minuteSecondMatch[2])) * 1000;

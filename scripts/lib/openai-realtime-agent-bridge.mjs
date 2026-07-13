@@ -16,6 +16,10 @@ export class OpenAiRealtimeAgentBridge {
     this.commentaryAudioEnabled = options.commentaryAudioEnabled === true;
     this.vadEagerness = options.vadEagerness ?? "medium";
     this.maxOutputTokens = clampNumber(options.maxOutputTokens, 64, 512, 512);
+    this.truncationRetentionRatio = clampNumber(options.truncationRetentionRatio, 0.5, 0.95, 0.8);
+    this.truncationPostInstructionsTokens = Math.round(
+      clampNumber(options.truncationPostInstructionsTokens, 1000, 8000, 1800)
+    );
     this.manualTurnControl = options.manualTurnControl !== false;
     this.bargeInDelayMs = clampNumber(options.bargeInDelayMs, 250, 1200, 450);
     this.shortBackchannelMaxMs = clampNumber(options.shortBackchannelMaxMs, 250, 1600, 900);
@@ -127,6 +131,13 @@ export class OpenAiRealtimeAgentBridge {
         tools: this.tools,
         tool_choice: "auto",
         max_output_tokens: this.maxOutputTokens,
+        truncation: {
+          type: "retention_ratio",
+          retention_ratio: this.truncationRetentionRatio,
+          token_limits: {
+            post_instructions: this.truncationPostInstructionsTokens
+          }
+        },
         reasoning: { effort: this.reasoningEffort },
         audio: {
           input: {

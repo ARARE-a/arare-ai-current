@@ -25,10 +25,13 @@ if (
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 10 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 12 ||
   health?.realtimeAgent?.reasoningEffort !== "low" ||
   health?.realtimeAgent?.vadEagerness !== "medium" ||
   health?.realtimeAgent?.maxOutputTokens !== 512 ||
+  health?.realtimeAgent?.truncationRetentionRatio !== 0.8 ||
+  health?.realtimeAgent?.truncationPostInstructionsTokens !== 1800 ||
+  health?.realtimeAgent?.boundedConversationContextReady !== true ||
   health?.realtimeAgent?.preambleAudioEnabled !== true ||
   health?.realtimeAgent?.manualTurnControlReady !== true ||
   health?.realtimeAgent?.automaticVadResponseDisabled !== true ||
@@ -67,6 +70,7 @@ if (
   health?.realtimeAgent?.naturalReceptionPromptReady !== true ||
   health?.realtimeAgent?.autonomousConversationReady !== true ||
   health?.realtimeAgent?.structuredToolFactsReady !== true ||
+  health?.realtimeAgent?.completeCourseComparisonFactsReady !== true ||
   health?.realtimeAgent?.fixedToolUtterancesDisabled !== true ||
   health?.realtimeAgent?.storeKnowledgeToolReady !== true ||
   health?.realtimeAgent?.freeTalkSideTopicReady !== true ||
