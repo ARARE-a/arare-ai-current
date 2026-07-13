@@ -301,6 +301,7 @@ confirmationSession.reservationDraft.startsAt = confirmationStartsAt;
 confirmationSession.reservationDraft.course = session.storeContext.courses[1];
 confirmationSession.reservationDraft.nominationIntent = false;
 confirmationSession.reservationDraft.therapistName = "みさき";
+confirmationSession.reservationDraft.assignedRoomName = "Room A";
 confirmationSession.reservationDraft.customerName = "斎藤";
 confirmationSession.reservationDraft.phone = "080-3788-4404";
 confirmationSession.reservationDraft.firstVisit = false;
@@ -309,6 +310,33 @@ markRealtimeAgentAssistantEvidence(confirmationSession, confirmationReply);
 if (!confirmationSession.realtimeAgentState.confirmationSpoken) {
   throw new Error(`Natural final confirmation did not satisfy the server evidence gate: ${confirmationReply}`);
 }
+
+sendUserText(socket, "はい、その予約内容でお願いします");
+const holdResponse = await createResponseAndWait(socket, events);
+const holdCall = findToolCall(holdResponse, "create_reservation_hold");
+if (!holdCall) {
+  throw new Error(`Model did not create the hold after explicit post-summary consent: ${extractTranscript(holdResponse) || "no tool call"}`);
+}
+const holdArgs = parseArguments(holdCall);
+if (
+  holdArgs.confirmation_token !== "verification-confirmation-token" ||
+  holdArgs.customer_confirmed !== true ||
+  !String(holdArgs.confirmation_phrase ?? "").includes("はい")
+) {
+  throw new Error(`Reservation hold arguments were incorrect: ${holdCall.arguments}`);
+}
+sendToolOutput(socket, holdCall.call_id, {
+  ok: true,
+  code: "HOLD_CREATED_SMS_SENT",
+  terminal: true,
+  reservation_id: "verification-reservation-id",
+  reservation_status: "tentative",
+  sms_status: "sent",
+  store_confirmation_required: true,
+  required_disclosures: ["reservation_is_tentative", "sms_was_sent", "store_confirmation_will_follow"],
+  allowed_actions: ["close_call_after_natural_summary"]
+});
+await createResponseAndWait(socket, events);
 
 const boundarySocket = socket;
 const boundaryEvents = events;
@@ -358,6 +386,7 @@ console.log(JSON.stringify({
     prohibitedServiceBoundaryHeld: true,
     structuredFinalConfirmationSpoken: true,
     noHoldBeforePostSummaryConsent: true,
+    holdCreatedOnlyAfterExplicitConsent: true,
     naturalConfirmationPassesEvidenceGate: true
   },
   samples: {
@@ -455,8 +484,12 @@ function buildSyntheticConfirmationOutput({ startsAt, confirmationToken }) {
       course_name: "90分スタンダードコース",
       course_duration_min: 90,
       course_price_yen: 17000,
+      nomination_fee_yen: 0,
+      options_total_yen: 0,
+      total_price_yen: 17000,
       booking_type: "free",
       therapist_name: "みさき",
+      room_name: "Room A",
       customer_name: "斎藤",
       phone_last4: "4404",
       first_visit: "repeat",
@@ -467,8 +500,10 @@ function buildSyntheticConfirmationOutput({ startsAt, confirmationToken }) {
       "starts_at",
       "course_name",
       "course_duration_min",
+      "total_price_yen",
       "booking_type",
       "therapist_name",
+      "room_name",
       "customer_name",
       "phone_last4",
       "first_visit",

@@ -51,6 +51,26 @@ const realtimeAgentResponseWatchdogMs = Math.max(
   6000,
   Number(process.env.OPENAI_REALTIME_AGENT_RESPONSE_WATCHDOG_MS ?? 12000)
 );
+const realtimeAgentManualTurnControl = process.env.OPENAI_REALTIME_AGENT_MANUAL_TURN_CONTROL !== "false";
+const realtimeAgentBargeInDelayMs = boundedNumberEnv("OPENAI_REALTIME_AGENT_BARGE_IN_DELAY_MS", 450, 250, 1200);
+const realtimeAgentShortBackchannelMaxMs = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_SHORT_BACKCHANNEL_MAX_MS",
+  900,
+  250,
+  1600
+);
+const realtimeAgentLowConfidenceThreshold = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_LOW_CONFIDENCE_THRESHOLD",
+  0.58,
+  0,
+  1
+);
+const realtimeAgentTranscriptionWatchdogMs = boundedNumberEnv(
+  "OPENAI_REALTIME_AGENT_TRANSCRIPTION_WATCHDOG_MS",
+  2500,
+  1000,
+  5000
+);
 const realtimeAgentQuotaCircuitMs = Math.max(
   30000,
   Number(process.env.OPENAI_REALTIME_AGENT_QUOTA_CIRCUIT_MS ?? 120000)
@@ -351,8 +371,21 @@ const server = http.createServer(async (request, response) => {
           vadEagerness: realtimeAgentVadEagerness,
           responseWatchdogMs: realtimeAgentResponseWatchdogMs,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 5,
+          conversationFlowVersion: 6,
           scriptedReplyPrimary: false,
+          manualTurnControlReady: realtimeAgentManualTurnControl,
+          automaticVadResponseDisabled: realtimeAgentManualTurnControl,
+          automaticVadInterruptDisabled: realtimeAgentManualTurnControl,
+          bargeInDelayMs: realtimeAgentBargeInDelayMs,
+          shortBackchannelMaxMs: realtimeAgentShortBackchannelMaxMs,
+          lowConfidenceThreshold: realtimeAgentLowConfidenceThreshold,
+          transcriptionWatchdogMs: realtimeAgentTranscriptionWatchdogMs,
+          transcriptionWatchdogReady: true,
+          latencyTelemetryReady: true,
+          latencySummaryReady: true,
+          availabilityEvidenceGateReady: true,
+          finalConfirmationPriceRoomReady: true,
+          assignmentConsistencyGateReady: true,
           reservationToolGateReady: true,
           explicitConfirmationGateReady: true,
           firstVisitExplicitAnswerGateReady: true,
@@ -607,7 +640,11 @@ function createPhoneSession() {
     endCallHandoffData: undefined,
     endCallFallbackTimer: undefined,
     usageAccumulator: createVoiceUsageAccumulator(),
-    usageMeterRecorded: false
+    usageMeterRecorded: false,
+    realtimeAgentLatenciesMs: [],
+    realtimeAgentVadDecisionLatenciesMs: [],
+    realtimeAgentPostVadLatenciesMs: [],
+    lastRealtimeAgentTurnDecision: undefined
   };
 }
 
@@ -999,6 +1036,11 @@ agentWss.on("connection", (twilioSocket) => {
         voice: realtimeAgentVoice,
         transcriptionModel: realtimeAgentTranscriptionModel,
         vadEagerness: realtimeAgentVadEagerness,
+        manualTurnControl: realtimeAgentManualTurnControl,
+        bargeInDelayMs: realtimeAgentBargeInDelayMs,
+        shortBackchannelMaxMs: realtimeAgentShortBackchannelMaxMs,
+        lowConfidenceThreshold: realtimeAgentLowConfidenceThreshold,
+        transcriptionWatchdogMs: realtimeAgentTranscriptionWatchdogMs,
         responseWatchdogMs: realtimeAgentResponseWatchdogMs,
         instructions: buildRealtimeAgentInstructions(session),
         tools: buildRealtimeAgentTools(),
@@ -1014,6 +1056,9 @@ agentWss.on("connection", (twilioSocket) => {
           pushCustomerTranscript(session, transcript);
           await appendPhoneConversationMessage(session, "CUSTOMER", transcript);
           await upsertCallLog(session, "TRANSCRIBED");
+          const decision = classifyRealtimeAgentCustomerTurn(session, transcript, metadata);
+          session.lastRealtimeAgentTurnDecision = decision;
+          return decision;
         },
         onAssistantTranscript: async (transcript) => {
           session.lastAssistantText = transcript;
@@ -1027,6 +1072,22 @@ agentWss.on("connection", (twilioSocket) => {
         },
         onUsage: (source, usage) => {
           addVoiceUsage(session.usageAccumulator, source, usage);
+        },
+        onLatency: ({ latencyMs, vadDecisionLatencyMs, postVadLatencyMs }) => {
+          if (!Number.isFinite(latencyMs)) return;
+          session.realtimeAgentLatenciesMs ??= [];
+          session.realtimeAgentLatenciesMs.push(latencyMs);
+          if (session.realtimeAgentLatenciesMs.length > 100) session.realtimeAgentLatenciesMs.shift();
+          if (Number.isFinite(vadDecisionLatencyMs)) {
+            session.realtimeAgentVadDecisionLatenciesMs ??= [];
+            session.realtimeAgentVadDecisionLatenciesMs.push(vadDecisionLatencyMs);
+            if (session.realtimeAgentVadDecisionLatenciesMs.length > 100) session.realtimeAgentVadDecisionLatenciesMs.shift();
+          }
+          if (Number.isFinite(postVadLatencyMs)) {
+            session.realtimeAgentPostVadLatenciesMs ??= [];
+            session.realtimeAgentPostVadLatenciesMs.push(postVadLatencyMs);
+            if (session.realtimeAgentPostVadLatenciesMs.length > 100) session.realtimeAgentPostVadLatenciesMs.shift();
+          }
         },
         onSpeechStarted: () => {
           session.lastClientSpeakingAt = Date.now();
@@ -1090,7 +1151,13 @@ agentWss.on("connection", (twilioSocket) => {
   });
 
   twilioSocket.on("close", async () => {
-    logRelay("openai_realtime_agent_closed", { callSid: session.callSid });
+    const latencySummary = {
+      endToFirstAudio: summarizeRealtimeAgentLatencies(session.realtimeAgentLatenciesMs, 1500),
+      vadDecision: summarizeRealtimeAgentLatencies(session.realtimeAgentVadDecisionLatenciesMs),
+      postVadToFirstAudio: summarizeRealtimeAgentLatencies(session.realtimeAgentPostVadLatenciesMs)
+    };
+    logRelay("openai_realtime_agent_latency_summary", { callSid: session.callSid, ...latencySummary });
+    logRelay("openai_realtime_agent_closed", { callSid: session.callSid, latencySummary });
     clearRealtimeAgentNoPromptWatchdog(session);
     session.agentBridge?.close();
     const finalCallLogState = buildFinalCallLogState(session);
@@ -1102,6 +1169,28 @@ agentWss.on("connection", (twilioSocket) => {
     }
   });
 });
+
+function summarizeRealtimeAgentLatencies(values, targetMs = undefined) {
+  const sorted = (Array.isArray(values) ? values : [])
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .sort((left, right) => left - right);
+  if (!sorted.length) {
+    return { count: 0, p50Ms: null, p95Ms: null, maxMs: null, targetMs: targetMs ?? null, targetRate: null };
+  }
+  const percentile = (fraction) => sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)];
+  const targetCount = Number.isFinite(targetMs)
+    ? sorted.filter((value) => value <= targetMs).length
+    : null;
+  return {
+    count: sorted.length,
+    p50Ms: percentile(0.5),
+    p95Ms: percentile(0.95),
+    maxMs: sorted[sorted.length - 1],
+    targetMs: Number.isFinite(targetMs) ? targetMs : null,
+    targetRate: targetCount === null ? null : Number((targetCount / sorted.length).toFixed(4))
+  };
+}
 
 async function processCallerPrompt(session, twilioSocket, callerText, transport, transcriptionMetadata = {}) {
   const promptStartedAt = Date.now();
@@ -2978,6 +3067,15 @@ async function applyDateTimeGuard(session, callerText, context) {
       });
       return reply;
     }
+
+    const reply = "承知しました。担当者のご希望はまだ登録していません。続けてご用件をどうぞ。";
+    logConversationState(session, "therapist_false_positive_guard", {
+      user_utterance: callerText,
+      assistant_response: reply,
+      next_action: "continue_free_conversation",
+      error_reason: "non_nomination_context"
+    });
+    return reply;
   }
 
   if (guard?.category === "confirmation_required" && isLowConfidenceConfirmationText(text)) {
@@ -3477,6 +3575,7 @@ function hasDateTimeCue(text) {
 
 function clearNonExplicitTherapistSelection(draft) {
   if (!draft) return;
+  clearRealtimeAgentAvailabilityAssignment(draft);
   if (!draft.therapistName) return;
   if (draft.selected_therapist_source === "explicit_user_nomination") return;
   draft.therapistName = undefined;
@@ -4232,6 +4331,7 @@ async function formatRequestedTimeAvailabilityAnswer(session, context, text) {
   logConversationState(session, "availability_check");
 
   if (!check.ok) {
+    clearRealtimeAgentAvailabilityAssignment(draft);
     draft.awaitingFinalConfirmation = false;
     draft.awaitingField = "startsAt";
     const nextSlot = await findNextAvailableSlot(session, context, getJstTodayParts(), draft.startsAt, draft.therapistName);
@@ -4274,6 +4374,7 @@ async function validateReservation(session, context) {
   logConversationState(session, "validate_reservation");
 
   if (!check.ok) {
+    clearRealtimeAgentAvailabilityAssignment(draft);
     draft.awaitingFinalConfirmation = false;
     draft.awaitingField = "startsAt";
     const nextSlot = await findNextAvailableSlot(session, context, getJstTodayParts(), draft.startsAt, draft.therapistName);
@@ -4287,13 +4388,13 @@ async function validateReservation(session, context) {
     };
   }
 
-  if (check.selectedTherapist?.displayName) {
-    draft.therapistName = check.selectedTherapist.displayName;
-    if (draft.selected_therapist_source !== "explicit_user_nomination") {
-      draft.selected_therapist_source = "ai_assigned_after_availability";
-    }
-  }
-  return { ok: true, reason: "OK", selectedTherapist: check.selectedTherapist };
+  applyRealtimeAgentAvailabilityAssignment(draft, check);
+  return {
+    ok: true,
+    reason: "OK",
+    selectedTherapist: check.selectedTherapist,
+    selectedRoom: check.selectedRoom
+  };
 }
 
 async function ensureAvailabilityGate(session, context) {
@@ -4308,6 +4409,7 @@ async function ensureAvailabilityGate(session, context) {
   });
 
   if (!check.ok) {
+    clearRealtimeAgentAvailabilityAssignment(draft);
     resetDetailsAfterUnavailable(draft);
     const nextSlot = await findNextAvailableSlot(session, context, getJstTodayParts(), draft.startsAt, draft.therapistName);
     if (nextSlot) {
@@ -4328,12 +4430,14 @@ async function ensureAvailabilityGate(session, context) {
     draft.selected_therapist_source = "ai_assigned_after_availability";
     draft.nominationIntent = false;
   }
+  applyRealtimeAgentAvailabilityAssignment(draft, check);
   draft.noSameDayShift = false;
   clearSuggestedCandidate(draft);
   return { ok: true, reason: "OK" };
 }
 
 function resetDetailsAfterUnavailable(draft) {
+  clearRealtimeAgentAvailabilityAssignment(draft);
   draft.customerName = undefined;
   draft.phone = undefined;
   draft.course = undefined;
@@ -4426,7 +4530,12 @@ async function checkReservationAvailability(session, context, draft) {
     startsAt,
     endsAt,
     therapistName: draft.therapistName,
-    nominated: draft.nominationIntent === true || draft.selected_therapist_source === "explicit_user_nomination"
+    nominated: draft.nominationIntent === true || draft.selected_therapist_source === "explicit_user_nomination",
+    preferredRoomId: draft.assignedRoomId,
+    preferredTherapistId: namesLookSame(
+      normalizeTherapistName(draft.assignedTherapistName ?? ""),
+      normalizeTherapistName(draft.therapistName ?? "")
+    ) ? draft.assignedTherapistId : undefined
   });
 
   if (availability.reason === "STORE_BLOCKED") {
@@ -4470,6 +4579,7 @@ async function checkReservationAvailability(session, context, draft) {
     reason: "OK",
     availableTherapists,
     selectedTherapist: availability.therapist,
+    selectedRoom: availability.room,
     startsAt,
     endsAt,
     matchedShiftCount: availability.matchedShiftCount,
@@ -4483,6 +4593,9 @@ function summarizeAvailabilityCheck(check) {
     reason: check?.reason ?? "UNKNOWN",
     availableTherapists: (check?.availableTherapists ?? []).map((therapist) => therapist.displayName),
     selectedTherapist: check?.selectedTherapist?.displayName,
+    selectedTherapistId: check?.selectedTherapist?.id,
+    selectedRoom: check?.selectedRoom?.name,
+    selectedRoomId: check?.selectedRoom?.id,
     startsAt: check?.startsAt?.toISOString?.(),
     endsAt: check?.endsAt?.toISOString?.(),
     matchedShiftCount: check?.matchedShiftCount ?? 0,
@@ -5169,6 +5282,11 @@ function createReservationDraft() {
     nominationIntent: undefined,
     therapistName: undefined,
     selected_therapist_source: undefined,
+    assignedTherapistId: undefined,
+    assignedTherapistName: undefined,
+    assignedTherapistNominationFee: undefined,
+    assignedRoomId: undefined,
+    assignedRoomName: undefined,
     suggested_therapist: undefined,
     suggestedNominationIntent: undefined,
     customerName: undefined,
@@ -5943,7 +6061,24 @@ function buildFinalConfirmationText(draft) {
     : "\u30d5\u30ea\u30fc";
   const visitHistory = draft.firstVisit === true ? "\u521d\u3081\u3066" : "\u904e\u53bb\u306b\u3054\u5229\u7528\u3042\u308a";
   const attention = draft.attentionConfirmed === true ? "\u6ce8\u610f\u4e8b\u9805\u78ba\u8a8d\u6e08\u307f" : "\u6ce8\u610f\u4e8b\u9805\u672a\u78ba\u8a8d";
-  return "\u78ba\u8a8d\u3057\u307e\u3059\u3002" + formatDateTimeJa(draft.startsAt) + "\u3001" + formatCourseNameForSpeech(draft.course.name) + formatDraftOptionsForSpeech(draft) + "\u3001" + nomination + "\u3001" + draft.customerName + "\u69d8\u3001\u96fb\u8a71\u756a\u53f7" + draft.phone + "\u3001" + visitHistory + "\u3001" + attention + "\u3067\u3059\u3002\u5408\u3063\u3066\u3044\u308c\u3070\u300c\u306f\u3044\u300d\u3068\u304a\u7b54\u3048\u304f\u3060\u3055\u3044\u3002";
+  const room = draft.assignedRoomName ? "\u3001\u90e8\u5c4b" + draft.assignedRoomName : "";
+  return "\u78ba\u8a8d\u3057\u307e\u3059\u3002" + formatDateTimeJa(draft.startsAt) + "\u3001" + formatCourseNameForSpeech(draft.course.name) + formatDraftOptionsForSpeech(draft) + "\u3001\u6599\u91d1" + formatYen(calculateRealtimeAgentTotalPrice(draft)) + "\u3001" + nomination + room + "\u3001" + draft.customerName + "\u69d8\u3001\u96fb\u8a71\u756a\u53f7" + draft.phone + "\u3001" + visitHistory + "\u3001" + attention + "\u3001\u5e97\u8217\u78ba\u8a8d\u524d\u306e\u4eee\u4e88\u7d04\u3067\u3059\u3002\u5408\u3063\u3066\u3044\u308c\u3070\u300c\u306f\u3044\u300d\u3068\u304a\u7b54\u3048\u304f\u3060\u3055\u3044\u3002";
+}
+
+function calculateRealtimeAgentOptionsTotal(options) {
+  return (Array.isArray(options) ? options : [])
+    .reduce((sum, option) => {
+      const price = Number(option?.price ?? 0);
+      return Number.isFinite(price) ? sum + price : sum;
+    }, 0);
+}
+
+function calculateRealtimeAgentTotalPrice(draft) {
+  const coursePrice = Number(draft?.course?.price ?? 0);
+  const nominationFee = draft?.nominationIntent === true
+    ? Number(draft?.assignedTherapistNominationFee ?? 0)
+    : 0;
+  return coursePrice + nominationFee + calculateRealtimeAgentOptionsTotal(draft?.options);
 }
 
 function formatDraftOptionsForSpeech(draft) {
@@ -6087,11 +6222,21 @@ async function createPhoneReservation(session, context) {
     startsAt: draft.startsAt,
     endsAt,
     therapistName: draft.therapistName,
-    nominated: draft.nominationIntent
+    nominated: draft.nominationIntent,
+    preferredRoomId: draft.assignedRoomId,
+    preferredTherapistId: draft.assignedTherapistId
   });
 
   if (!availability.therapist) throw new Error("available therapist was not found");
   if (!availability.room) throw new Error("available room was not found");
+  if (
+    (draft.assignedTherapistId && availability.therapist.id !== draft.assignedTherapistId) ||
+    (draft.assignedRoomId && availability.room.id !== draft.assignedRoomId)
+  ) {
+    const error = new Error("availability assignment changed before reservation creation");
+    error.code = "AVAILABILITY_ASSIGNMENT_CHANGED";
+    throw error;
+  }
 
   // Keep the relay aligned with the core reservation service: phone AI creates a hold,
   // and confirmation must go through the approval path that re-checks availability.
@@ -6335,7 +6480,10 @@ async function findPhoneAvailability(input) {
   const blockedRoomIds = new Set(blockedSlots.map((item) => item.roomId).filter(Boolean));
   const blockedTherapistIds = new Set(blockedSlots.map((item) => item.therapistId).filter(Boolean));
 
-  const room = storeBlocked ? null : rooms.find((item) => !reservedRoomIds.has(item.id) && !blockedRoomIds.has(item.id));
+  const availableRooms = storeBlocked
+    ? []
+    : rooms.filter((item) => !reservedRoomIds.has(item.id) && !blockedRoomIds.has(item.id));
+  const room = availableRooms.find((item) => item.id === input.preferredRoomId) ?? availableRooms[0] ?? null;
   const shiftTherapists = shifts
     .map((shift) => shift.therapist)
     .filter((therapist) => therapist?.status === "ACTIVE");
@@ -6346,7 +6494,7 @@ async function findPhoneAvailability(input) {
     if (input.nominated && normalizedName) return namesLookSame(normalizeTherapistName(item.displayName), normalizedName);
     return true;
   });
-  const therapist = availableTherapists[0] ?? null;
+  const therapist = availableTherapists.find((item) => item.id === input.preferredTherapistId) ?? availableTherapists[0] ?? null;
 
   return {
     room,
@@ -7696,6 +7844,12 @@ function numberEnv(name, fallback) {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
+function boundedNumberEnv(name, fallback, min, max) {
+  const value = Number(process.env[name]);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
 function buildFinalCallLogState(session) {
   const diagnostics = buildSessionReviewDiagnostics(session);
   if (session.reservationId) return { status: "HOLD_CREATED", reviewNotes: diagnostics || undefined };
@@ -8514,6 +8668,31 @@ function createRealtimeAgentState() {
   };
 }
 
+function applyRealtimeAgentAvailabilityAssignment(draft, check) {
+  if (!draft || !check?.ok || !check.selectedTherapist || !check.selectedRoom) {
+    clearRealtimeAgentAvailabilityAssignment(draft);
+    return;
+  }
+  draft.assignedTherapistId = check.selectedTherapist.id;
+  draft.assignedTherapistName = check.selectedTherapist.displayName;
+  draft.assignedTherapistNominationFee = Number(check.selectedTherapist.nominationFee ?? 0);
+  draft.assignedRoomId = check.selectedRoom.id;
+  draft.assignedRoomName = check.selectedRoom.name;
+  draft.therapistName = check.selectedTherapist.displayName;
+  if (draft.selected_therapist_source !== "explicit_user_nomination") {
+    draft.selected_therapist_source = "ai_assigned_after_availability";
+  }
+}
+
+function clearRealtimeAgentAvailabilityAssignment(draft) {
+  if (!draft) return;
+  draft.assignedTherapistId = undefined;
+  draft.assignedTherapistName = undefined;
+  draft.assignedTherapistNominationFee = undefined;
+  draft.assignedRoomId = undefined;
+  draft.assignedRoomName = undefined;
+}
+
 function buildRealtimeAgentInstructions(session) {
   const callerLast4 = phoneLast4(session.from);
   return [
@@ -8527,10 +8706,12 @@ function buildRealtimeAgentInstructions(session) {
     "通常は会話に合う一項目だけを自然に尋ねます。利用者が複数の情報をまとめて話した時は遮らずまとめて受け取ります。どの項目から尋ねるかは固定しません。",
     "AVAILABLEの後は、後続手順や今後聞く項目を予告せず、空きの事実と会話に合う一つの質問だけを自然に伝えてください。",
     "聞き取りや意味が曖昧なら勝手に確定せず、会話に合う自然な方法で確認してください。質問数や順番は固定しません。",
+    "利用者の『はい』『うん』は、直前の質問が一つの候補だけを確認する質問だった場合に限って、その候補への同意として扱えます。二択や複数候補への返答なら一つに絞って聞き直してください。",
+    "相づち、接続確認、聞き返し、雑音らしい短い発話を、日時、コース、氏名、来店歴として解釈してはいけません。『聞こえていますか』にはまず直接答え、予約内容を変更しません。",
     "",
     "# 発話とツール",
     "commentaryフェーズは内部処理専用です。利用者向け音声はfinal_answerフェーズだけに出してください。",
-    "ツールを呼ぶ時は、処理中という説明や内部推論を話さずツールだけを呼びます。",
+    "ツールを呼ぶ時は内部推論を話しません。DB確認などで利用者を待たせる可能性がある場合だけ、『確認しますね』程度の短い受領応答を一度だけ返してからツールを呼べます。長い進捗説明はしません。",
     "ツール出力は読み上げ原稿ではなく、事実、制約、許可された次の行動です。結果を理解したうえで、会話に合う自然な応答、質問、別ツールの実行をあなた自身で選んでください。",
     "保持情報に自信がなければget_reception_stateを使い、店舗固有の質問で本文が必要ならsearch_store_knowledgeを使います。検索結果がない内容は推測せず、未確認であることを正直に伝えます。",
     "ツール名、内部トークン、JSON、システム、プロンプト、処理手順を利用者へ話してはいけません。",
@@ -8542,13 +8723,14 @@ function buildRealtimeAgentInstructions(session) {
     "",
     "# 予約と副作用の絶対ルール",
     "- 空きがあるとは推測しません。日時、コース時間、指名条件が分かった時だけcheck_availabilityを使います。最短希望ならfind_next_availabilityを使います。",
+    "- check_availabilityへ渡す日時とコースは、利用者が明示した内容、または一候補だけの復唱に利用者が同意した内容に限ります。近い登録コースや都合のよい時刻へ置き換えません。",
     "- AVAILABLEになる前は、氏名や電話番号などの個人情報を求めたり記録したりしません。",
     "- AVAILABLE後は、利用者が自然に話した情報をrecord_booking_detailsへ記録します。不足項目は会話に合う順で確認でき、利用者が複数まとめて話した場合はまとめて記録できます。",
     callerLast4
       ? `- SMS送信先に発信元番号を使う時は、下4桁${callerLast4}を含めるなどして送信先を明示し、利用者の明確な同意後だけuse_caller_numberを使います。`
       : "- SMS送信先の電話番号は利用者が明示した番号だけを記録します。",
     "- 初回か再来か、注意事項への同意、電話番号利用は、利用者の明示発言だけを記録します。単なる相づちから推測しません。",
-    "- 必須情報が揃ったらprepare_final_confirmationを使います。返されたconfirmationの日時、コース、指名条件、氏名、電話番号下4桁、初回/再来、仮予約であることを、会話に合う自然な言葉で漏れなく要約し、明確な同意を待ちます。",
+    "- 必須情報が揃ったらprepare_final_confirmationを使います。返されたconfirmationの日時、コース、合計料金、担当、部屋、氏名、電話番号下4桁、初回/再来、仮予約であることを、会話に合う自然な言葉で漏れなく要約し、明確な同意を待ちます。",
     "- create_reservation_holdは、その要約を利用者へ話した後に明確な同意を得た場合だけ使います。訂正や曖昧な返答では使いません。",
     "- 予約作成、SMS送信、変更などの副作用は必ず対応ツールで行います。ツール成功前に実行済みとは言いません。",
     "- 作成されるのは仮予約です。成功後も店舗確認が必要で、確定済みとは案内しません。SMS結果もツール結果どおりに案内します。",
@@ -8698,10 +8880,20 @@ function markRealtimeAgentAssistantEvidence(session, transcript) {
 
 function isRealtimeAgentConfirmationSpoken(session, transcript) {
   const draft = session.reservationDraft;
-  if (!draft?.customerName || !draft?.course || !draft?.phone || !draft?.startsAt) return false;
+  if (
+    !draft?.customerName ||
+    !draft?.course ||
+    !draft?.phone ||
+    !draft?.startsAt ||
+    !draft?.assignedRoomName ||
+    !draft?.therapistName
+  ) return false;
   const text = normalizeJapaneseSpeech(transcript).replace(/\s+/g, "");
   const name = normalizeJapaneseSpeech(draft.customerName).replace(/\s+/g, "");
   const therapistName = normalizeJapaneseSpeech(draft.therapistName ?? "").replace(/\s+/g, "");
+  const roomName = normalizeRealtimeRoomName(draft.assignedRoomName);
+  const normalizedRoomTranscript = normalizeRealtimeRoomName(transcript);
+  const totalPrice = calculateRealtimeAgentTotalPrice(draft);
   const digits = normalizePhoneForComparison(transcript);
   const expectedLast4 = phoneLast4(draft.phone);
   const dateTime = getJstDateTimePartsFromDate(draft.startsAt);
@@ -8717,8 +8909,11 @@ function isRealtimeAgentConfirmationSpoken(session, transcript) {
   return Boolean(
     name &&
       text.includes(name) &&
-      text.includes(String(draft.course.durationMin)) &&
+      realtimeTextSupportsCourse(transcript, draft.course) &&
       (!therapistName || text.includes(therapistName)) &&
+      roomName &&
+      normalizedRoomTranscript.includes(roomName) &&
+      realtimeTextSupportsPrice(transcript, totalPrice) &&
       expectedLast4 &&
       digits.includes(expectedLast4) &&
       dateMentioned &&
@@ -8727,6 +8922,34 @@ function isRealtimeAgentConfirmationSpoken(session, transcript) {
       tentativeStatusMentioned &&
       confirmationRequested
   );
+}
+
+function normalizeRealtimeRoomName(value) {
+  return normalizeJapaneseSpeech(value)
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/room/gu, "ルーム")
+    .replace(/ルーム(?:エー|えー)/gu, "ルームa")
+    .replace(/ルーム(?:ビー|びー)/gu, "ルームb")
+    .replace(/ルーム(?:シー|しー)/gu, "ルームc")
+    .replace(/ルーム(?:ディー|でぃー)/gu, "ルームd")
+    .replace(/[\s\u3000]/gu, "");
+}
+
+function realtimeTextSupportsPrice(value, price) {
+  const amount = Number(price);
+  if (!Number.isFinite(amount) || amount < 0) return false;
+  const text = normalizeDateTimeDigits(normalizeJapaneseSpeech(value))
+    .replace(/[，,\s\u3000]/gu, "");
+  if (text.includes(`${Math.round(amount)}円`)) return true;
+  const rounded = Math.round(amount);
+  const man = Math.floor(rounded / 10000);
+  const remainder = rounded % 10000;
+  if (man <= 0) return false;
+  if (remainder === 0 && text.includes(`${man}万円`)) return true;
+  if (text.includes(`${man}万${remainder}円`)) return true;
+  if (remainder > 0 && remainder % 1000 === 0 && text.includes(`${man}万${remainder / 1000}千円`)) return true;
+  return false;
 }
 
 function scheduleRealtimeAgentNoPromptWatchdog(session, bridge) {
@@ -8888,6 +9111,280 @@ function realtimeKnowledgeBigrams(value) {
   return chars.slice(0, -1).map((char, index) => char + chars[index + 1]);
 }
 
+function classifyRealtimeAgentCustomerTurn(session, transcript, metadata = {}) {
+  const text = normalizeJapaneseSpeech(transcript);
+  const confidence = typeof metadata.confidence === "number" ? metadata.confidence : null;
+  if (metadata.assistantWasPlaying === true && isRealtimeBriefBackchannel(text)) {
+    return { ignore: true, reason: "brief_backchannel_during_playback" };
+  }
+  if (confidence !== null && confidence < realtimeAgentLowConfidenceThreshold) {
+    return {
+      forceRespond: true,
+      toolChoice: "none",
+      reason: "low_transcription_confidence",
+      instructions: "直前の発話は認識信頼度が低いです。内容を補完せず、利用者の言葉を決めつけない短い聞き返しを一度だけ行ってください。予約情報は更新しないでください。"
+    };
+  }
+  if (isRealtimeBareAffirmative(text) && realtimeAssistantContainsMultipleChoice(session.lastAssistantText)) {
+    return {
+      forceRespond: true,
+      toolChoice: "none",
+      reason: "ambiguous_affirmative_after_multiple_choice",
+      instructions: "直前の『はい』だけでは複数候補のどれかを特定できません。候補を一つに絞った短い確認質問をしてください。日時、コース、担当を推測してはいけません。"
+    };
+  }
+  if (isRealtimeConnectionCheck(text)) {
+    return {
+      forceRespond: true,
+      toolChoice: "none",
+      reason: "connection_check",
+      instructions: "利用者は接続確認をしています。まず聞こえていることを短く直接答え、予約内容を変更したり次の項目へ進めたりしないでください。"
+    };
+  }
+  return { forceRespond: true, reason: "normal_turn" };
+}
+
+function guardRealtimeAgentToolInput(session, name) {
+  if (["get_reception_state", "search_store_knowledge"].includes(name)) return null;
+  const confidence = typeof session.lastUserTranscriptConfidence === "number"
+    ? session.lastUserTranscriptConfidence
+    : null;
+  if (confidence !== null && confidence < realtimeAgentLowConfidenceThreshold) {
+    return {
+      ok: false,
+      code: "LOW_TRANSCRIPTION_CONFIDENCE",
+      error: { reason: "current_user_turn_not_reliable", confidence },
+      required_user_action: "ask_once_without_guessing",
+      allowed_actions: ["ask_for_clarification", "answer_without_side_effect"]
+    };
+  }
+  const state = session.realtimeAgentState ?? createRealtimeAgentState();
+  const currentTranscript = state.lastUserTranscriptSpeechSequence === state.userSpeechSequence
+    ? state.lastUserTranscript
+    : "";
+  if (
+    ["check_availability", "find_next_availability"].includes(name) &&
+    isRealtimeBareAffirmative(currentTranscript) &&
+    realtimeAssistantContainsMultipleChoice(session.lastAssistantText)
+  ) {
+    return {
+      ok: false,
+      code: "AMBIGUOUS_CONFIRMATION",
+      error: { reason: "bare_affirmative_cannot_select_multiple_candidates" },
+      required_user_action: "confirm_one_candidate_only",
+      allowed_actions: ["ask_single_candidate_confirmation", "ask_for_clarification"]
+    };
+  }
+  return null;
+}
+
+function validateRealtimeAgentAvailabilityEvidence(session, startsAt, course) {
+  const lastCustomerText = getRealtimeAgentLastCustomerText(session);
+  const assistantText = String(session.lastAssistantText ?? "");
+  const singleCandidateConfirmation = isRealtimeBareAffirmative(lastCustomerText) &&
+    !realtimeAssistantContainsMultipleChoice(assistantText);
+  const latestDateEvidence = getRealtimeAgentLatestFieldEvidence(session, realtimeTextContainsDateEvidence);
+  const latestTimeEvidence = getRealtimeAgentLatestFieldEvidence(session, realtimeTextContainsTimeEvidence);
+  const latestCourseEvidence = getRealtimeAgentLatestFieldEvidence(session, realtimeTextContainsCourseEvidence);
+  const dateSupported = realtimeTextSupportsDate(latestDateEvidence, startsAt) ||
+    (singleCandidateConfirmation && realtimeTextSupportsDate(assistantText, startsAt));
+  const timeSupported = realtimeTextSupportsTime(latestTimeEvidence, startsAt) ||
+    (singleCandidateConfirmation && realtimeTextSupportsTime(assistantText, startsAt));
+  if (!dateSupported || !timeSupported) {
+    return {
+      ok: false,
+      code: "DATETIME_EVIDENCE_REQUIRED",
+      error: {
+        field: "starts_at",
+        reason: !dateSupported
+          ? "requested_date_not_explicitly_supported"
+          : "requested_time_not_explicitly_supported"
+      },
+      candidate_starts_at: formatJstDateTimeOffset(startsAt),
+      required_user_action: "ask_single_datetime_confirmation",
+      allowed_actions: ["ask_single_datetime_confirmation", "ask_for_clarification"]
+    };
+  }
+
+  const existingDuration = session.reservationDraft?.course?.durationMin;
+  const courseSupported = realtimeTextSupportsCourse(latestCourseEvidence, course) ||
+    (singleCandidateConfirmation && realtimeTextSupportsCourse(assistantText, course)) ||
+    (!latestCourseEvidence && existingDuration === course.durationMin);
+  if (!courseSupported) {
+    return {
+      ok: false,
+      code: "COURSE_EVIDENCE_REQUIRED",
+      error: { field: "course_duration_min", reason: "requested_course_not_explicitly_supported" },
+      candidate_course: { name: course.name, duration_min: course.durationMin },
+      required_user_action: "ask_single_course_confirmation",
+      allowed_actions: ["ask_single_course_confirmation", "offer_registered_courses"]
+    };
+  }
+  return null;
+}
+
+function validateRealtimeAgentNextAvailabilityEvidence(session, course) {
+  const customerText = getRealtimeAgentCustomerEvidence(session);
+  const lastCustomerText = getRealtimeAgentLastCustomerText(session);
+  const assistantText = String(session.lastAssistantText ?? "");
+  const singleCandidateConfirmation = isRealtimeBareAffirmative(lastCustomerText) &&
+    !realtimeAssistantContainsMultipleChoice(assistantText);
+  const latestCourseEvidence = getRealtimeAgentLatestFieldEvidence(session, realtimeTextContainsCourseEvidence);
+  const existingDuration = session.reservationDraft?.course?.durationMin;
+  const courseSupported = realtimeTextSupportsCourse(latestCourseEvidence, course) ||
+    (singleCandidateConfirmation && realtimeTextSupportsCourse(assistantText, course)) ||
+    (!latestCourseEvidence && existingDuration === course.durationMin);
+  if (!courseSupported) {
+    return {
+      ok: false,
+      code: "COURSE_EVIDENCE_REQUIRED",
+      error: { field: "course_duration_min", reason: "requested_course_not_explicitly_supported" },
+      candidate_course: { name: course.name, duration_min: course.durationMin },
+      required_user_action: "ask_single_course_confirmation",
+      allowed_actions: ["ask_single_course_confirmation", "offer_registered_courses"]
+    };
+  }
+  const asksForAvailability = /(?:最短|一番早|早い時間|次に空|空いて|空き時間|いつ.*(?:空|取れ))/u.test(
+    normalizeJapaneseSpeech(customerText)
+  );
+  const assistantAskedSingleSearchConfirmation = singleCandidateConfirmation &&
+    /(?:最短|一番早|空き時間|探して|検索して)/u.test(normalizeJapaneseSpeech(assistantText));
+  if (!asksForAvailability && !assistantAskedSingleSearchConfirmation) {
+    return {
+      ok: false,
+      code: "NEXT_AVAILABILITY_INTENT_REQUIRED",
+      error: { reason: "next_availability_search_not_requested" },
+      required_user_action: "confirm_search_intent",
+      allowed_actions: ["ask_search_intent", "continue_conversation"]
+    };
+  }
+  return null;
+}
+
+function getRealtimeAgentCustomerEvidence(session, limit = 16) {
+  return (session.conversationTurns ?? [])
+    .filter((turn) => turn.role === "CUSTOMER")
+    .slice(-limit)
+    .map((turn) => turn.content)
+    .join("\n");
+}
+
+function getRealtimeAgentLastCustomerText(session) {
+  return [...(session.conversationTurns ?? [])]
+    .reverse()
+    .find((turn) => turn.role === "CUSTOMER")?.content ?? "";
+}
+
+function getRealtimeAgentLatestFieldEvidence(session, predicate, limit = 16) {
+  const turns = (session.conversationTurns ?? [])
+    .filter((turn) => turn.role === "CUSTOMER")
+    .slice(-limit)
+    .reverse();
+  for (const turn of turns) {
+    const clauses = splitRealtimeAgentCorrectionClauses(turn.content).reverse();
+    for (const clause of clauses) {
+      if (predicate(clause)) return clause;
+    }
+  }
+  return "";
+}
+
+function splitRealtimeAgentCorrectionClauses(value) {
+  return String(value ?? "")
+    .split(/(?:いや(?:、|,)?|ではなく(?:て)?|じゃなく(?:て)?|そうじゃなく(?:て)?|やっぱり|やはり|訂正(?:して)?|言い直すと|間違えました|変更(?:して)?)/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function realtimeTextContainsDateEvidence(value) {
+  return Boolean(parseRequestedDateParts(normalizeDateTimeDigits(value)));
+}
+
+function realtimeTextContainsTimeEvidence(value) {
+  const text = normalizeDateTimeDigits(normalizeJapaneseSpeech(value));
+  return /(?:[0-2]?\d\s*(?:時|:|：)|正午|午前|午後|深夜|夜中|明け方)/u.test(text);
+}
+
+function realtimeTextContainsCourseEvidence(value) {
+  const text = normalizeDateTimeDigits(normalizeJapaneseSpeech(value));
+  return /(?:\d{2,3}\s*分|(?:一|二|三|四|五|六|七|八|九|十|百)+\s*分|(?:一|二|三|四|五|六|七|八|九|十|半)+\s*時間|コース)/u.test(text);
+}
+
+function realtimeTextSupportsDate(value, startsAt) {
+  if (!(startsAt instanceof Date) || Number.isNaN(startsAt.getTime())) return false;
+  const parsed = parseRequestedDateParts(normalizeDateTimeDigits(value));
+  if (!parsed?.parts) return false;
+  const expected = getJstDateTimePartsFromDate(startsAt);
+  return parsed.parts.year === expected.year &&
+    parsed.parts.month === expected.month &&
+    parsed.parts.day === expected.day;
+}
+
+function realtimeTextSupportsTime(value, startsAt) {
+  const text = normalizeDateTimeDigits(normalizeJapaneseSpeech(value)).replace(/\s+/g, "");
+  if (!text || !(startsAt instanceof Date) || Number.isNaN(startsAt.getTime())) return false;
+  const parts = getJstDateTimePartsFromDate(startsAt);
+  const hour = Number(parts.hour);
+  const minute = Number(parts.minute);
+  const hour12 = hour % 12 || 12;
+  const minuteSupported = minute === 0 ||
+    text.includes(`${minute}分`) ||
+    (minute === 30 && text.includes("半"));
+  if (!minuteSupported) return false;
+  if (hour >= 6 && text.includes(`${hour}時`)) return true;
+  if (hour === 0 && /(?:午前0時|深夜0時|夜中0時|深夜12時|夜中12時)/u.test(text)) return true;
+  if (hour > 0 && hour < 12) {
+    return new RegExp(`(?:午前|朝|深夜|夜中)${hour12}時`, "u").test(text);
+  }
+  if (hour === 12 && /(?:正午|昼12時|午後0時|午後12時)/u.test(text)) return true;
+  if (hour > 12) {
+    return new RegExp(`(?:午後|昼|夕方|夜)${hour12}時`, "u").test(text);
+  }
+  return false;
+}
+
+function realtimeTextSupportsCourse(value, course) {
+  const text = normalizeJapaneseSpeech(value).replace(/\s+/g, "");
+  if (!text || !course) return false;
+  const duration = Number(course.durationMin);
+  const durationWords = new Map([
+    [30, ["三十分", "さんじゅっぷん"]],
+    [60, ["六十分", "ろくじゅっぷん", "一時間"]],
+    [90, ["九十分", "きゅうじゅっぷん", "一時間半"]],
+    [120, ["百二十分", "ひゃくにじゅっぷん", "二時間"]]
+  ]);
+  if (Number.isFinite(duration) && text.includes(`${duration}分`)) return true;
+  if ((durationWords.get(duration) ?? []).some((word) => text.includes(word))) return true;
+  const courseToken = normalizeJapaneseSpeech(course.name)
+    .replace(/[0-9０-９,，円￥¥/／・\s]/g, "")
+    .replace(/(?:分|コース|リラクゼーション)/gu, "");
+  return courseToken.length >= 2 && text.includes(courseToken);
+}
+
+function isRealtimeBriefBackchannel(value) {
+  const text = normalizeJapaneseSpeech(value)
+    .replace(/[\s。、！？!?.,]/g, "")
+    .replace(/ー+/g, "");
+  return /^(?:はい|うん|ええ|そう|そうです|そうですね|なるほど|わかりました|了解|あ|え|へえ|ふん)$/u.test(text);
+}
+
+function isRealtimeBareAffirmative(value) {
+  const text = normalizeJapaneseSpeech(value)
+    .replace(/[\s。、！？!?.,]/g, "")
+    .replace(/ー+/g, "");
+  return /^(?:はい|うん|ええ|そうです|そう|大丈夫です|お願いします|それで)$/u.test(text);
+}
+
+function realtimeAssistantContainsMultipleChoice(value) {
+  const text = normalizeJapaneseSpeech(value);
+  return /(?:それとも|または|もしくは|どちら|どっち|どれ|いずれ|何時|どの(?:時間|コース|方)|か、.+か)/u.test(text);
+}
+
+function isRealtimeConnectionCheck(value) {
+  const text = normalizeJapaneseSpeech(value);
+  return /(?:聞こえていますか|聞こえてますか|聞こえてる|聞いてますか|もしもし)/u.test(text);
+}
+
 async function handleRealtimeAgentTool(session, name, args, callId) {
   const state = session.realtimeAgentState ?? createRealtimeAgentState();
   session.realtimeAgentState = state;
@@ -8898,6 +9395,16 @@ async function handleRealtimeAgentTool(session, name, args, callId) {
     callId,
     toolCallCount: state.toolCallCount
   });
+  const inputGuard = guardRealtimeAgentToolInput(session, name);
+  if (inputGuard) {
+    logRelay("openai_realtime_agent_tool_rejected", {
+      callSid: session.callSid,
+      name,
+      callId,
+      code: inputGuard.code
+    });
+    return inputGuard;
+  }
   try {
     if (name === "get_reception_state") return getRealtimeAgentReceptionState(session);
     if (name === "search_store_knowledge") return searchRealtimeAgentStoreKnowledge(session, args);
@@ -8978,6 +9485,9 @@ async function checkRealtimeAgentAvailability(session, args) {
     };
   }
 
+  const evidenceError = validateRealtimeAgentAvailabilityEvidence(session, startsAt, course);
+  if (evidenceError) return evidenceError;
+
   const bookingType = args?.booking_type === "nominated" ? "nominated" : "free";
   const therapist = bookingType === "nominated"
     ? findRealtimeAgentTherapist(context, args?.therapist_name)
@@ -9010,6 +9520,7 @@ async function checkRealtimeAgentAvailability(session, args) {
   const check = await checkReservationAvailability(session, context, draft);
   draft.availabilityCheckResult = summarizeAvailabilityCheck(check);
   if (!check.ok) {
+    clearRealtimeAgentAvailabilityAssignment(draft);
     const state = session.realtimeAgentState;
     state.availabilityToken = undefined;
     state.availabilityKey = undefined;
@@ -9031,10 +9542,7 @@ async function checkRealtimeAgentAvailability(session, args) {
     };
   }
 
-  if (check.selectedTherapist?.displayName) {
-    draft.therapistName = check.selectedTherapist.displayName;
-    if (bookingType === "free") draft.selected_therapist_source = "ai_assigned_after_availability";
-  }
+  applyRealtimeAgentAvailabilityAssignment(draft, check);
   const state = session.realtimeAgentState;
   state.availabilityKey = buildRealtimeAgentAvailabilityKey(draft);
   state.availabilityToken = crypto.randomUUID();
@@ -9048,7 +9556,9 @@ async function checkRealtimeAgentAvailability(session, args) {
       ends_at: formatJstDateTimeOffset(check.endsAt),
       course_name: course.name,
       course_duration_min: course.durationMin,
+      course_price_yen: Number(course.price),
       therapist_name: check.selectedTherapist?.displayName ?? null,
+      room_name: check.selectedRoom?.name ?? null,
       booking_type: bookingType
     },
     collection_state: getRealtimeAgentCollectionState(draft),
@@ -9069,6 +9579,8 @@ async function findRealtimeAgentNextAvailability(session, args) {
       allowed_actions: ["offer_registered_courses", "ask_for_clarification"]
     };
   }
+  const evidenceError = validateRealtimeAgentNextAvailabilityEvidence(session, course);
+  if (evidenceError) return evidenceError;
 
   const bookingType = args?.booking_type === "nominated" ? "nominated" : "free";
   const therapist = bookingType === "nominated"
@@ -9140,6 +9652,7 @@ async function findRealtimeAgentNextAvailability(session, args) {
   const check = await checkReservationAvailability(session, context, draft);
   draft.availabilityCheckResult = summarizeAvailabilityCheck(check);
   if (!check.ok) {
+    clearRealtimeAgentAvailabilityAssignment(draft);
     return {
       ok: false,
       code: "NEXT_AVAILABILITY_STALE",
@@ -9147,7 +9660,7 @@ async function findRealtimeAgentNextAvailability(session, args) {
       allowed_actions: ["retry_find_next_availability", "ask_for_other_datetime"]
     };
   }
-  if (check.selectedTherapist?.displayName) draft.therapistName = check.selectedTherapist.displayName;
+  applyRealtimeAgentAvailabilityAssignment(draft, check);
 
   const state = session.realtimeAgentState;
   state.availabilityKey = buildRealtimeAgentAvailabilityKey(draft);
@@ -9162,7 +9675,9 @@ async function findRealtimeAgentNextAvailability(session, args) {
       ends_at: formatJstDateTimeOffset(check.endsAt),
       course_name: course.name,
       course_duration_min: course.durationMin,
+      course_price_yen: Number(course.price),
       therapist_name: check.selectedTherapist?.displayName ?? nextSlot.therapist?.displayName ?? null,
+      room_name: check.selectedRoom?.name ?? null,
       booking_type: bookingType
     },
     collection_state: getRealtimeAgentCollectionState(draft),
@@ -9325,6 +9840,13 @@ async function prepareRealtimeAgentFinalConfirmation(session, args) {
       allowed_actions: ["resolve_validation_error", "recheck_availability", "offer_store_follow_up"]
     };
   }
+  const postValidationTokenError = validateRealtimeAgentAvailabilityToken(session, args?.availability_token);
+  if (postValidationTokenError) {
+    return {
+      ...postValidationTokenError,
+      required_user_action: "recheck_availability_before_final_confirmation"
+    };
+  }
   const state = session.realtimeAgentState;
   const draft = session.reservationDraft;
   state.confirmationToken = crypto.randomUUID();
@@ -9344,8 +9866,14 @@ async function prepareRealtimeAgentFinalConfirmation(session, args) {
       course_name: draft.course.name,
       course_duration_min: draft.course.durationMin,
       course_price_yen: draft.course.price,
+      nomination_fee_yen: draft.nominationIntent === true
+        ? Number(draft.assignedTherapistNominationFee ?? 0)
+        : 0,
+      options_total_yen: calculateRealtimeAgentOptionsTotal(draft.options),
+      total_price_yen: calculateRealtimeAgentTotalPrice(draft),
       booking_type: draft.nominationIntent === true ? "nominated" : "free",
       therapist_name: draft.therapistName ?? null,
+      room_name: draft.assignedRoomName ?? null,
       customer_name: draft.customerName,
       phone_last4: phoneLast4(draft.phone),
       first_visit: draft.firstVisit === true ? "first" : "repeat",
@@ -9356,8 +9884,10 @@ async function prepareRealtimeAgentFinalConfirmation(session, args) {
       "starts_at",
       "course_name",
       "course_duration_min",
+      "total_price_yen",
       "booking_type",
       "therapist_name",
+      "room_name",
       "customer_name",
       "phone_last4",
       "first_visit",
@@ -9426,14 +9956,29 @@ async function createRealtimeAgentReservationHold(session, args) {
       allowed_actions: ["recheck_availability", "offer_store_follow_up"]
     };
   }
+  const postValidationTokenError = validateRealtimeAgentAvailabilityToken(session, state.availabilityToken);
+  if (postValidationTokenError) return postValidationTokenError;
   try {
     const result = await createPhoneReservation(session, context);
     draft.completed = true;
     session.reservationId = result.reservation.id;
+    logRelay("openai_realtime_agent_hold_created", {
+      callSid: session.callSid,
+      reservationId: result.reservation.id,
+      notificationId: result.notificationId,
+      smsSid: result.smsResult?.sid ?? null,
+      smsStatus: result.smsResult?.ok ? "sent" : "failed"
+    });
     return {
       ok: true,
       code: result.smsResult?.ok ? "HOLD_CREATED_SMS_SENT" : "HOLD_CREATED_SMS_FAILED",
       terminal: true,
+      trace: {
+        twilio_call_sid: session.callSid ?? null,
+        reservation_id: result.reservation.id,
+        notification_id: result.notificationId,
+        sms_sid: result.smsResult?.sid ?? null
+      },
       reservation_id: result.reservation.id,
       reservation_status: "tentative",
       sms_status: result.smsResult?.ok ? "sent" : "failed",
@@ -9445,6 +9990,16 @@ async function createRealtimeAgentReservationHold(session, args) {
     };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
+    if (error?.code === "AVAILABILITY_ASSIGNMENT_CHANGED") {
+      invalidateRealtimeAgentAvailability(session);
+      return {
+        ok: false,
+        code: "AVAILABILITY_CHANGED",
+        error: { reason: "therapist_or_room_changed_before_creation" },
+        required_user_action: "recheck_availability_and_repeat_final_confirmation",
+        allowed_actions: ["check_availability", "find_next_availability"]
+      };
+    }
     if (/同じ電話番号で時間が重なる予約があります/u.test(reason)) {
       invalidateRealtimeAgentConfirmation(session);
       return {
@@ -9495,13 +10050,28 @@ function invalidateRealtimeAgentConfirmation(session) {
   }
 }
 
+function invalidateRealtimeAgentAvailability(session) {
+  invalidateRealtimeAgentConfirmation(session);
+  const state = session.realtimeAgentState;
+  if (state) {
+    state.availabilityToken = undefined;
+    state.availabilityKey = undefined;
+  }
+  if (session.reservationDraft) {
+    session.reservationDraft.availabilityCheckResult = undefined;
+    clearRealtimeAgentAvailabilityAssignment(session.reservationDraft);
+  }
+}
+
 function buildRealtimeAgentAvailabilityKey(draft) {
   if (!draft?.startsAt || !draft?.course) return "";
   return [
     draft.startsAt.toISOString(),
     draft.course.id,
     draft.nominationIntent === true ? "nominated" : "free",
-    normalizeTherapistName(draft.therapistName ?? "")
+    normalizeTherapistName(draft.therapistName ?? ""),
+    draft.assignedTherapistId ?? "",
+    draft.assignedRoomId ?? ""
   ].join("|");
 }
 
@@ -9675,6 +10245,7 @@ export {
   buildRealtimeAgentInstructions,
   buildRealtimeAgentTools,
   buildRealtimeAgentAvailabilityKey,
+  classifyRealtimeAgentCustomerTurn,
   classifyRealtimeAgentFailure,
   closeRealtimeAgentCircuit,
   createPhoneSession,
@@ -9687,7 +10258,11 @@ export {
   prepareRealtimeAgentFinalConfirmation,
   recordRealtimeAgentBookingDetails,
   searchRealtimeAgentStoreKnowledge,
+  summarizeRealtimeAgentLatencies,
   isRealtimeAgentCircuitOpen,
+  guardRealtimeAgentToolInput,
+  validateRealtimeAgentAvailabilityEvidence,
+  validateRealtimeAgentNextAvailabilityEvidence,
   validateRealtimeAgentAvailabilityToken
 };
 

@@ -32,6 +32,7 @@ const assistantTranscripts = [];
 const toolCalls = [];
 const playbackEvents = [];
 const usageEvents = [];
+const latencyEvents = [];
 const bridgeErrors = [];
 const bridgeLogs = [];
 const tools = [
@@ -53,6 +54,8 @@ const bridge = new OpenAiRealtimeAgentBridge({
   model: "gpt-realtime-2.1",
   voice: "cedar",
   transcriptionModel: "gpt-4o-transcribe",
+  bargeInDelayMs: 250,
+  transcriptionWatchdogMs: 1000,
   instructions: "日本語で自然に応答してください。",
   tools,
   log: (event, detail) => bridgeLogs.push({ event, detail }),
@@ -82,6 +85,7 @@ const bridge = new OpenAiRealtimeAgentBridge({
         };
   },
   onUsage: (source, usage) => usageEvents.push({ source, usage }),
+  onLatency: (event) => latencyEvents.push(event),
   onPlaybackComplete: (event) => playbackEvents.push(event),
   onError: async (error) => bridgeErrors.push(error.message)
 });
@@ -90,8 +94,8 @@ await bridge.connect();
 const sessionUpdate = openai.sent[0];
 assert.equal(sessionUpdate.type, "session.update");
 assert.equal(sessionUpdate.session.model, "gpt-realtime-2.1");
-assert.equal(sessionUpdate.session.audio.input.turn_detection.create_response, true);
-assert.equal(sessionUpdate.session.audio.input.turn_detection.interrupt_response, true);
+assert.equal(sessionUpdate.session.audio.input.turn_detection.create_response, false);
+assert.equal(sessionUpdate.session.audio.input.turn_detection.interrupt_response, false);
 assert.equal(sessionUpdate.session.audio.output.voice, "cedar");
 assert.deepEqual(sessionUpdate.session.tools, tools);
 
@@ -213,18 +217,125 @@ openai.emit("message", JSON.stringify({
 }));
 openai.emit("message", JSON.stringify({ type: "response.output_audio.delta", delta: Buffer.alloc(800).toString("base64") }));
 bridge.firstOutputAudioAt = Date.now() - 50;
-openai.emit("message", JSON.stringify({ type: "input_audio_buffer.speech_started", item_id: "caller_interrupt" }));
+const clearsBeforeBackchannel = twilio.sent.filter((item) => item.event === "clear").length;
+openai.emit("message", JSON.stringify({
+  type: "input_audio_buffer.speech_started",
+  item_id: "caller_backchannel",
+  audio_start_ms: 1000
+}));
+openai.emit("message", JSON.stringify({
+  type: "input_audio_buffer.speech_stopped",
+  item_id: "caller_backchannel",
+  audio_end_ms: 1200
+}));
+openai.emit("message", JSON.stringify({
+  type: "conversation.item.input_audio_transcription.completed",
+  item_id: "caller_backchannel",
+  transcript: "はい",
+  logprobs: [{ logprob: -0.01 }]
+}));
 await tick();
-assert.ok(twilio.sent.some((item) => item.event === "clear"));
+assert.equal(twilio.sent.filter((item) => item.event === "clear").length, clearsBeforeBackchannel);
+assert.ok(openai.sent.some((item) =>
+  item.type === "conversation.item.delete" && item.item_id === "caller_backchannel"
+));
+assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_backchannel_ignored"));
+assert.equal(latencyEvents.length, 1);
+assert.ok(latencyEvents[0].latencyMs >= 0);
+
+const clearsBeforeNoise = twilio.sent.filter((item) => item.event === "clear").length;
+openai.emit("message", JSON.stringify({
+  type: "input_audio_buffer.speech_started",
+  item_id: "caller_short_noise",
+  audio_start_ms: 1300
+}));
+await wait(300);
+openai.emit("message", JSON.stringify({
+  type: "input_audio_buffer.speech_stopped",
+  item_id: "caller_short_noise",
+  audio_end_ms: 1800
+}));
+openai.emit("message", JSON.stringify({
+  type: "conversation.item.input_audio_transcription.completed",
+  item_id: "caller_short_noise",
+  transcript: "",
+  logprobs: []
+}));
+await tick();
+assert.equal(twilio.sent.filter((item) => item.event === "clear").length, clearsBeforeNoise);
+assert.ok(openai.sent.some((item) =>
+  item.type === "conversation.item.delete" && item.item_id === "caller_short_noise"
+));
+
+const clearsBeforeExplicitInterrupt = twilio.sent.filter((item) => item.event === "clear").length;
+openai.emit("message", JSON.stringify({ type: "input_audio_buffer.speech_started", item_id: "caller_interrupt" }));
+await wait(280);
+assert.equal(
+  twilio.sent.filter((item) => item.event === "clear").length,
+  clearsBeforeExplicitInterrupt,
+  "speech duration alone must not interrupt playback"
+);
+openai.emit("message", JSON.stringify({
+  type: "conversation.item.input_audio_transcription.delta",
+  item_id: "caller_interrupt",
+  delta: "ちょっと待って"
+}));
+await tick();
+assert.equal(
+  twilio.sent.filter((item) => item.event === "clear").length,
+  clearsBeforeExplicitInterrupt + 1
+);
 const truncate = openai.sent.find((item) => item.type === "conversation.item.truncate" && item.item_id === "item_interrupt");
 assert.ok(truncate);
 assert.ok(truncate.audio_end_ms >= 0 && truncate.audio_end_ms <= 100);
+assert.ok(openai.sent.some((item) => item.type === "response.cancel"));
+openai.emit("message", JSON.stringify({
+  type: "response.done",
+  response: { id: "resp_interrupt", status: "cancelled", output: [] }
+}));
+await tick();
 openai.emit("message", JSON.stringify({
   type: "error",
   error: { message: "Audio content of 8450ms is already shorter than 14050ms" }
 }));
 await tick();
 assert.deepEqual(bridgeErrors, [], "a stale truncate response must not terminate the call");
+
+openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_general_interrupt" } }));
+openai.emit("message", JSON.stringify({
+  type: "response.output_item.added",
+  item: { id: "item_general_interrupt", type: "message" }
+}));
+openai.emit("message", JSON.stringify({
+  type: "response.output_audio.delta",
+  item_id: "item_general_interrupt",
+  delta: Buffer.alloc(8000).toString("base64")
+}));
+const clearsBeforeGeneralInterrupt = twilio.sent.filter((item) => item.event === "clear").length;
+openai.emit("message", JSON.stringify({
+  type: "input_audio_buffer.speech_started",
+  item_id: "caller_general_interrupt"
+}));
+openai.emit("message", JSON.stringify({
+  type: "conversation.item.input_audio_transcription.delta",
+  item_id: "caller_general_interrupt",
+  delta: "明日の15時に変更したいです"
+}));
+await wait(930);
+assert.equal(
+  twilio.sent.filter((item) => item.event === "clear").length,
+  clearsBeforeGeneralInterrupt + 1,
+  "meaningful sustained speech must interrupt after the backchannel window"
+);
+assert.ok(bridgeLogs.some((item) =>
+  item.event === "openai_realtime_agent_meaningful_interruption" &&
+  item.detail.reason === "meaningful_sustained_caller_speech"
+));
+openai.emit("message", JSON.stringify({
+  type: "response.done",
+  response: { id: "resp_general_interrupt", status: "cancelled", output: [] }
+}));
+await tick();
 
 openai.emit("message", JSON.stringify({ type: "response.created", response: { id: "resp_terminal_tool" } }));
 openai.emit("message", JSON.stringify({
@@ -292,9 +403,28 @@ assert.match(openai.sent.at(-1).response.instructions, /これ以上ツールを
 assert.equal(openai.sent.at(-1).response.tool_choice, "none");
 assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_tool_loop_guard"));
 
+openai.emit("message", JSON.stringify({
+  type: "input_audio_buffer.speech_started",
+  item_id: "caller_without_transcript",
+  audio_start_ms: 5000
+}));
+openai.emit("message", JSON.stringify({
+  type: "input_audio_buffer.speech_stopped",
+  item_id: "caller_without_transcript",
+  audio_end_ms: 5600
+}));
+await wait(1050);
+assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_transcription_watchdog"));
+assert.equal(openai.sent.at(-1).type, "response.create");
+assert.equal(openai.sent.at(-1).response.tool_choice, "none");
+
 bridge.close();
-console.log(JSON.stringify({ ok: true, checks: 40 }, null, 2));
+console.log(JSON.stringify({ ok: true, checks: 58 }, null, 2));
 
 function tick() {
   return new Promise((resolve) => setImmediate(resolve));
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

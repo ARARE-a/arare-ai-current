@@ -13,6 +13,11 @@ export class OpenAiRealtimeAgentBridge {
     this.instructions = options.instructions;
     this.tools = options.tools ?? [];
     this.vadEagerness = options.vadEagerness ?? "medium";
+    this.manualTurnControl = options.manualTurnControl !== false;
+    this.bargeInDelayMs = clampNumber(options.bargeInDelayMs, 250, 1200, 450);
+    this.shortBackchannelMaxMs = clampNumber(options.shortBackchannelMaxMs, 250, 1600, 900);
+    this.lowConfidenceThreshold = clampNumber(options.lowConfidenceThreshold, 0, 1, 0.58);
+    this.transcriptionWatchdogMs = clampNumber(options.transcriptionWatchdogMs, 1000, 5000, 2500);
     this.openAiUrl = options.openAiUrl ?? "wss://api.openai.com/v1/realtime";
     this.openAiSocketFactory = options.openAiSocketFactory ?? createOpenAiSocket;
     this.log = options.log ?? (() => {});
@@ -20,6 +25,7 @@ export class OpenAiRealtimeAgentBridge {
     this.onAssistantTranscript = options.onAssistantTranscript ?? (async () => {});
     this.onToolCall = options.onToolCall ?? (async () => ({ ok: false, code: "TOOL_NOT_IMPLEMENTED" }));
     this.onUsage = options.onUsage ?? (() => {});
+    this.onLatency = options.onLatency ?? (() => {});
     this.onSpeechStarted = options.onSpeechStarted ?? (() => {});
     this.onSpeechStopped = options.onSpeechStopped ?? (() => {});
     this.onPlaybackComplete = options.onPlaybackComplete ?? (() => {});
@@ -52,6 +58,16 @@ export class OpenAiRealtimeAgentBridge {
     this.processedResponseIds = new Set();
     this.terminalPending = false;
     this.consecutiveToolTurns = 0;
+    this.speechTurns = new Map();
+    this.partialInputTranscripts = new Map();
+    this.pendingTurnResponse = undefined;
+    this.responseCancellationPending = false;
+    this.discardResponseAudio = false;
+    this.activeTurnStartedAt = 0;
+    this.activeTurnItemId = undefined;
+    this.activeTurnVadDecisionLatencyMs = null;
+    this.toolExecutionActive = false;
+    this.inputAudioTimelineOriginAt = undefined;
   }
 
   async connect() {
@@ -64,7 +80,9 @@ export class OpenAiRealtimeAgentBridge {
     });
     this.openai = socket;
     socket.on("message", (raw) => {
-      void this.handleOpenAiMessage(raw);
+      void this.handleOpenAiMessage(raw).catch((error) => {
+        void this.fail(error instanceof Error ? error : new Error(String(error)));
+      });
     });
     socket.on("close", () => {
       this.clearResponseWatchdog();
@@ -112,8 +130,8 @@ export class OpenAiRealtimeAgentBridge {
             turn_detection: {
               type: "semantic_vad",
               eagerness: this.vadEagerness,
-              create_response: true,
-              interrupt_response: true
+              create_response: !this.manualTurnControl,
+              interrupt_response: !this.manualTurnControl
             }
           },
           output: {
@@ -133,6 +151,10 @@ export class OpenAiRealtimeAgentBridge {
     }
     if (message.event === "media") {
       if (!message.media?.payload) return;
+      const mediaTimestampMs = finiteNumberOrNull(message.media?.timestamp);
+      if (this.inputAudioTimelineOriginAt === undefined && mediaTimestampMs !== null) {
+        this.inputAudioTimelineOriginAt = Date.now() - mediaTimestampMs;
+      }
       if (this.openai?.readyState !== OPEN) {
         this.pendingInputAudio.push(message.media.payload);
         if (this.pendingInputAudio.length > 100) this.pendingInputAudio.shift();
@@ -179,24 +201,24 @@ export class OpenAiRealtimeAgentBridge {
     }
 
     if (event.type === "input_audio_buffer.speech_started") {
-      this.interruptPlayback();
-      this.onSpeechStarted({ audioStartMs: event.audio_start_ms ?? null, itemId: event.item_id ?? null });
+      this.beginCustomerSpeech(event);
       return;
     }
     if (event.type === "input_audio_buffer.speech_stopped") {
-      this.onSpeechStopped({ audioEndMs: event.audio_end_ms ?? null, itemId: event.item_id ?? null });
+      this.endCustomerSpeech(event);
+      return;
+    }
+    if (event.type === "conversation.item.input_audio_transcription.delta") {
+      const itemId = String(event.item_id ?? "");
+      if (itemId) {
+        const transcript = (this.partialInputTranscripts.get(itemId) ?? "") + String(event.delta ?? "");
+        this.partialInputTranscripts.set(itemId, transcript);
+        this.maybeInterruptFromPartialTranscript(itemId, transcript);
+      }
       return;
     }
     if (event.type === "conversation.item.input_audio_transcription.completed") {
-      const transcript = String(event.transcript ?? "").trim();
-      const confidence = summarizeTranscriptionConfidence(event.logprobs);
-      if (event.usage) this.onUsage("transcription", event.usage);
-      this.log("openai_realtime_agent_customer_transcript", {
-        itemId: event.item_id,
-        textLength: transcript.length,
-        confidence
-      });
-      if (transcript) await this.onCustomerTranscript(transcript, event.item_id, { confidence });
+      await this.handleCustomerTranscription(event);
       return;
     }
     if (event.type === "response.created") {
@@ -276,6 +298,8 @@ export class OpenAiRealtimeAgentBridge {
     this.currentAssistantTranscript = "";
     this.currentOutputBytes = 0;
     this.firstOutputAudioAt = 0;
+    this.responseCancellationPending = false;
+    this.discardResponseAudio = false;
     this.responseWatchdog = setTimeout(() => {
       if (this.responseActive && !this.responseHadAudio && !this.responseHadToolCall) {
         void this.fail(new Error("OpenAI Realtime agent returned no audio or tool call"));
@@ -285,6 +309,7 @@ export class OpenAiRealtimeAgentBridge {
 
   streamAudioToTwilio(delta, itemId) {
     if (!delta || !this.streamSid || this.twilioSocket.readyState !== OPEN) return;
+    if (this.discardResponseAudio) return;
     const resolvedItemId = this.resolveOutputItemId(itemId);
     if (this.isSuppressedCommentary(resolvedItemId)) {
       if (!this.suppressedCommentaryItems.has(resolvedItemId)) {
@@ -300,7 +325,24 @@ export class OpenAiRealtimeAgentBridge {
     }
     this.responseHadAudio = true;
     this.consecutiveToolTurns = 0;
-    if (!this.firstOutputAudioAt) this.firstOutputAudioAt = Date.now();
+    if (!this.firstOutputAudioAt) {
+      this.firstOutputAudioAt = Date.now();
+      if (this.activeTurnStartedAt > 0) {
+        const latencyMs = Math.max(0, this.firstOutputAudioAt - this.activeTurnStartedAt);
+        const vadDecisionLatencyMs = finiteNumberOrNull(this.activeTurnVadDecisionLatencyMs);
+        const detail = {
+          latencyMs,
+          vadDecisionLatencyMs,
+          postVadLatencyMs: vadDecisionLatencyMs === null ? null : Math.max(0, latencyMs - vadDecisionLatencyMs),
+          itemId: this.activeTurnItemId ?? null
+        };
+        this.log("openai_realtime_agent_response_latency", detail);
+        this.onLatency(detail);
+        this.activeTurnStartedAt = 0;
+        this.activeTurnItemId = undefined;
+        this.activeTurnVadDecisionLatencyMs = null;
+      }
+    }
     this.currentOutputBytes += Buffer.from(delta, "base64").length;
     this.clearResponseWatchdog();
     this.twilioSocket.send(JSON.stringify({
@@ -315,11 +357,21 @@ export class OpenAiRealtimeAgentBridge {
     if (responseId && this.processedResponseIds.has(responseId)) return;
     if (responseId) this.processedResponseIds.add(responseId);
     this.clearResponseWatchdog();
+    const cancelled = this.responseCancellationPending || response?.status === "cancelled";
     this.responseActive = false;
+    this.responseCancellationPending = false;
+    this.discardResponseAudio = false;
     if (response?.usage) this.onUsage("realtime_agent", response.usage);
+    if (cancelled) {
+      this.clearResponseOutputItems(response);
+      this.resetCurrentOutputState();
+      this.flushPendingTurnResponse();
+      return;
+    }
     const toolCalls = (response?.output ?? []).filter((item) => item?.type === "function_call");
     if (toolCalls.length) {
       this.responseHadToolCall = true;
+      if (this.responseHadAudio) this.sendPlaybackMark();
       this.clearResponseOutputItems(response);
       await this.executeToolCalls(toolCalls);
       return;
@@ -340,72 +392,82 @@ export class OpenAiRealtimeAgentBridge {
     });
     if (this.responseHadAudio) this.sendPlaybackMark();
     this.clearResponseOutputItems(response);
+    this.flushPendingTurnResponse();
   }
 
   async executeToolCalls(toolCalls) {
+    this.toolExecutionActive = true;
     let executed = 0;
     let terminalResultSeen = false;
-    for (const item of toolCalls) {
-      const callId = String(item.call_id ?? "");
-      if (!callId || this.processedToolCallIds.has(callId)) continue;
-      this.processedToolCallIds.add(callId);
-      executed += 1;
-      let args;
-      try {
-        args = JSON.parse(item.arguments || "{}");
-      } catch {
-        args = {};
-      }
-
-      let result;
-      if (terminalResultSeen) {
-        result = {
-          ok: false,
-          code: "SKIPPED_AFTER_TERMINAL_RESULT",
-          error: { reason: "call_already_completed" },
-          allowed_actions: ["close_call"]
-        };
-      } else {
+    try {
+      for (const item of toolCalls) {
+        const callId = String(item.call_id ?? "");
+        if (!callId || this.processedToolCallIds.has(callId)) continue;
+        this.processedToolCallIds.add(callId);
+        executed += 1;
+        let args;
         try {
-          result = await this.onToolCall({ name: item.name, arguments: args, callId });
-        } catch (error) {
-          this.log("openai_realtime_agent_tool_callback_failed", {
-            name: item.name,
-            callId,
-            reason: error instanceof Error ? error.message : String(error)
-          });
+          args = JSON.parse(item.arguments || "{}");
+        } catch {
+          args = {};
+        }
+
+        let result;
+        if (terminalResultSeen) {
           result = {
             ok: false,
-            code: "TOOL_EXECUTION_FAILED",
-            error: { reason: "tool_execution_failed" },
-            allowed_actions: ["explain_unavailable", "continue_without_action"]
+            code: "SKIPPED_AFTER_TERMINAL_RESULT",
+            error: { reason: "call_already_completed" },
+            allowed_actions: ["close_call"]
           };
+        } else {
+          try {
+            result = await this.onToolCall({ name: item.name, arguments: args, callId });
+          } catch (error) {
+            this.log("openai_realtime_agent_tool_callback_failed", {
+              name: item.name,
+              callId,
+              reason: error instanceof Error ? error.message : String(error)
+            });
+            result = {
+              ok: false,
+              code: "TOOL_EXECUTION_FAILED",
+              error: { reason: "tool_execution_failed" },
+              allowed_actions: ["explain_unavailable", "continue_without_action"]
+            };
+          }
         }
-      }
-      if (result?.terminal === true) {
-        this.terminalPending = true;
-        terminalResultSeen = true;
-      }
-      this.log("openai_realtime_agent_tool_completed", {
-        name: item.name,
-        callId,
-        ok: result?.ok === true,
-        code: result?.code ?? null
-      });
-      if (this.openai?.readyState !== OPEN) return;
-      this.openai.send(JSON.stringify({
-        type: "conversation.item.create",
-        item: {
-          type: "function_call_output",
-          call_id: callId,
-          output: JSON.stringify(result ?? { ok: false, code: "EMPTY_TOOL_RESULT" })
+        if (result?.terminal === true) {
+          this.terminalPending = true;
+          terminalResultSeen = true;
         }
-      }));
+        this.log("openai_realtime_agent_tool_completed", {
+          name: item.name,
+          callId,
+          ok: result?.ok === true,
+          code: result?.code ?? null
+        });
+        if (this.openai?.readyState !== OPEN) return;
+        this.openai.send(JSON.stringify({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: callId,
+            output: JSON.stringify(result ?? { ok: false, code: "EMPTY_TOOL_RESULT" })
+          }
+        }));
+      }
+    } finally {
+      this.toolExecutionActive = false;
     }
     if (executed > 0 && this.openai?.readyState === OPEN) {
       if (terminalResultSeen) {
         this.consecutiveToolTurns = 0;
         this.requestResponse(undefined, { toolChoice: "none" });
+        return;
+      }
+      if (this.pendingTurnResponse) {
+        this.flushPendingTurnResponse();
         return;
       }
       this.consecutiveToolTurns += 1;
@@ -443,12 +505,25 @@ export class OpenAiRealtimeAgentBridge {
     this.activeOutputItemId = undefined;
   }
 
-  interruptPlayback() {
+  interruptPlayback(options = {}) {
     if (this.streamSid && this.twilioSocket.readyState === OPEN) {
       this.twilioSocket.send(JSON.stringify({ event: "clear", streamSid: this.streamSid }));
     }
     const currentItemHasPendingPlayback = [...this.pendingMarks.values()]
       .some((mark) => mark.itemId && mark.itemId === this.currentOutputItemId);
+    if (
+      options.cancelResponse !== false &&
+      this.openai?.readyState === OPEN &&
+      this.responseActive &&
+      !this.responseCancellationPending
+    ) {
+      this.responseCancellationPending = true;
+      this.discardResponseAudio = true;
+      this.openai.send(JSON.stringify({ type: "response.cancel" }));
+      this.log("openai_realtime_agent_response_cancelled_for_caller", {
+        reason: options.reason ?? "caller_speech"
+      });
+    }
     if (
       this.openai?.readyState === OPEN &&
       this.currentOutputItemId &&
@@ -473,7 +548,6 @@ export class OpenAiRealtimeAgentBridge {
     }
     this.pendingMarks.clear();
     this.clearResponseWatchdog();
-    this.responseActive = false;
     this.responseHadAudio = false;
     this.currentOutputBytes = 0;
     this.firstOutputAudioAt = 0;
@@ -509,10 +583,275 @@ export class OpenAiRealtimeAgentBridge {
   close() {
     this.closed = true;
     this.clearResponseWatchdog();
+    for (const turn of this.speechTurns.values()) {
+      if (turn.interruptTimer) clearTimeout(turn.interruptTimer);
+      if (turn.sustainedSpeechTimer) clearTimeout(turn.sustainedSpeechTimer);
+      if (turn.transcriptionTimer) clearTimeout(turn.transcriptionTimer);
+    }
+    this.speechTurns.clear();
+    this.partialInputTranscripts.clear();
+    this.pendingTurnResponse = undefined;
+    this.toolExecutionActive = false;
+    this.inputAudioTimelineOriginAt = undefined;
     this.outputItemPhases.clear();
     this.outputItemTranscripts.clear();
     this.suppressedCommentaryItems.clear();
     if (this.openai?.readyState === OPEN) this.openai.close();
+  }
+
+  beginCustomerSpeech(event) {
+    const itemId = String(event.item_id ?? `speech-${Date.now()}`);
+    const assistantWasPlaying = this.isAssistantPlaybackActive();
+    const turn = {
+      itemId,
+      audioStartMs: finiteNumberOrNull(event.audio_start_ms),
+      startedAt: Date.now(),
+      stoppedAt: 0,
+      durationMs: null,
+      assistantWasPlaying,
+      interrupted: false,
+      interruptReason: undefined,
+      interruptTimer: undefined,
+      sustainedSpeechTimer: undefined,
+      transcriptionTimer: undefined,
+      respondedByWatchdog: false
+    };
+    if (this.manualTurnControl && assistantWasPlaying) {
+      turn.interruptTimer = setTimeout(() => {
+        turn.interruptTimer = undefined;
+        this.maybeInterruptFromPartialTranscript(itemId);
+      }, this.bargeInDelayMs);
+      turn.sustainedSpeechTimer = setTimeout(() => {
+        turn.sustainedSpeechTimer = undefined;
+        this.maybeInterruptFromPartialTranscript(itemId, undefined, { allowGeneralSpeech: true });
+      }, Math.max(this.shortBackchannelMaxMs, this.bargeInDelayMs + 250));
+    } else if (!this.manualTurnControl) {
+      this.interruptPlayback({ cancelResponse: false, reason: "automatic_vad" });
+    }
+    this.speechTurns.set(itemId, turn);
+    this.onSpeechStarted({
+      audioStartMs: turn.audioStartMs,
+      itemId,
+      assistantWasPlaying
+    });
+  }
+
+  endCustomerSpeech(event) {
+    const itemId = String(event.item_id ?? "");
+    const turn = this.speechTurns.get(itemId);
+    const audioEndMs = finiteNumberOrNull(event.audio_end_ms);
+    if (turn) {
+      const eventReceivedAt = Date.now();
+      turn.stoppedAt = this.resolveAcousticTimestamp(audioEndMs, eventReceivedAt);
+      turn.vadDecisionLatencyMs = Math.max(0, eventReceivedAt - turn.stoppedAt);
+      turn.durationMs = Number.isFinite(turn.audioStartMs) && Number.isFinite(audioEndMs)
+        ? Math.max(0, audioEndMs - turn.audioStartMs)
+        : Math.max(0, turn.stoppedAt - turn.startedAt);
+      if (turn.interruptTimer) {
+        clearTimeout(turn.interruptTimer);
+        turn.interruptTimer = undefined;
+      }
+      if (turn.sustainedSpeechTimer) {
+        clearTimeout(turn.sustainedSpeechTimer);
+        turn.sustainedSpeechTimer = undefined;
+      }
+      turn.transcriptionTimer = setTimeout(() => {
+        turn.transcriptionTimer = undefined;
+        if (
+          turn.assistantWasPlaying &&
+          !turn.interrupted &&
+          turn.durationMs !== null &&
+          turn.durationMs <= this.shortBackchannelMaxMs
+        ) {
+          if (this.openai?.readyState === OPEN && itemId) {
+            this.openai.send(JSON.stringify({ type: "conversation.item.delete", item_id: itemId }));
+          }
+          this.speechTurns.delete(itemId);
+          this.partialInputTranscripts.delete(itemId);
+          this.log("openai_realtime_agent_short_untranscribed_audio_ignored", {
+            itemId,
+            durationMs: turn.durationMs
+          });
+          return;
+        }
+        turn.respondedByWatchdog = true;
+        if (turn.assistantWasPlaying && !turn.interrupted) {
+          this.interruptPlayback({ cancelResponse: true, reason: "transcription_timeout" });
+        }
+        this.log("openai_realtime_agent_transcription_watchdog", {
+          itemId,
+          durationMs: turn.durationMs,
+          vadDecisionLatencyMs: turn.vadDecisionLatencyMs
+        });
+        this.queueTurnResponse({
+          instructions: "直前の利用者音声を確実に聞き取れませんでした。内容を推測せず、短い自然な日本語で一度だけ聞き返してください。予約情報は更新しないでください。",
+          toolChoice: "none",
+          startedAt: turn.stoppedAt || Date.now(),
+          itemId,
+          vadDecisionLatencyMs: turn.vadDecisionLatencyMs
+        });
+      }, this.transcriptionWatchdogMs);
+    }
+    this.onSpeechStopped({
+      audioEndMs,
+      itemId: itemId || null,
+      durationMs: turn?.durationMs ?? null,
+      interrupted: turn?.interrupted === true,
+      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs ?? null
+    });
+  }
+
+  async handleCustomerTranscription(event) {
+    const itemId = String(event.item_id ?? "");
+    const transcript = String(event.transcript ?? this.partialInputTranscripts.get(itemId) ?? "").trim();
+    const confidence = summarizeTranscriptionConfidence(event.logprobs);
+    const turn = this.speechTurns.get(itemId);
+    if (turn?.interruptTimer) clearTimeout(turn.interruptTimer);
+    if (turn?.sustainedSpeechTimer) clearTimeout(turn.sustainedSpeechTimer);
+    if (turn?.transcriptionTimer) clearTimeout(turn.transcriptionTimer);
+    this.speechTurns.delete(itemId);
+    this.partialInputTranscripts.delete(itemId);
+    if (event.usage) this.onUsage("transcription", event.usage);
+    this.log("openai_realtime_agent_customer_transcript", {
+      itemId,
+      textLength: transcript.length,
+      confidence,
+      durationMs: turn?.durationMs ?? null,
+      assistantWasPlaying: turn?.assistantWasPlaying === true,
+      interrupted: turn?.interrupted === true,
+      interruptReason: turn?.interruptReason ?? null,
+      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs ?? null
+    });
+    if (!transcript) {
+      if (this.openai?.readyState === OPEN && itemId) {
+        this.openai.send(JSON.stringify({ type: "conversation.item.delete", item_id: itemId }));
+      }
+      this.log("openai_realtime_agent_empty_transcript_ignored", {
+        itemId,
+        durationMs: turn?.durationMs ?? null
+      });
+      return;
+    }
+
+    const metadata = {
+      confidence,
+      durationMs: turn?.durationMs ?? null,
+      assistantWasPlaying: turn?.assistantWasPlaying === true,
+      interrupted: turn?.interrupted === true,
+      interruptReason: turn?.interruptReason ?? null,
+      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs ?? null
+    };
+    const callbackDecision = await this.onCustomerTranscript(transcript, itemId, metadata);
+    if (!this.manualTurnControl) return;
+    if (turn?.respondedByWatchdog) {
+      this.log("openai_realtime_agent_late_transcript_recorded", { itemId });
+      return;
+    }
+    const decision = normalizeTurnDecision(callbackDecision);
+    const briefBackchannel = metadata.assistantWasPlaying &&
+      (metadata.durationMs === null || metadata.durationMs <= this.shortBackchannelMaxMs) &&
+      isBriefBackchannel(transcript);
+    if (decision.ignore === true || (briefBackchannel && decision.forceRespond !== true)) {
+      if (this.openai?.readyState === OPEN && itemId) {
+        this.openai.send(JSON.stringify({ type: "conversation.item.delete", item_id: itemId }));
+      }
+      this.log("openai_realtime_agent_backchannel_ignored", {
+        itemId,
+        durationMs: metadata.durationMs,
+        transcriptLength: transcript.length
+      });
+      if (metadata.interrupted) {
+        this.queueTurnResponse({
+          instructions: "利用者の直前発話は短い相づちでした。新しい予約情報として扱わず、遮られた説明が残っている場合だけ自然に短く続けてください。",
+          toolChoice: "none",
+          startedAt: turn?.stoppedAt || Date.now(),
+          itemId,
+          vadDecisionLatencyMs: turn?.vadDecisionLatencyMs
+        });
+      }
+      return;
+    }
+
+    if (metadata.assistantWasPlaying && !metadata.interrupted) {
+      this.interruptPlayback({ cancelResponse: true, reason: "completed_caller_turn" });
+    }
+    const lowConfidence = typeof confidence === "number" && confidence < this.lowConfidenceThreshold;
+    const instructions = decision.instructions ?? (lowConfidence
+      ? "直前の利用者発話は認識信頼度が低いため、内容を推測せず、短い自然な日本語で一度だけ聞き返してください。予約情報は更新しないでください。"
+      : undefined);
+    this.queueTurnResponse({
+      instructions,
+      toolChoice: lowConfidence ? "none" : decision.toolChoice,
+      startedAt: turn?.stoppedAt || Date.now(),
+      itemId,
+      vadDecisionLatencyMs: turn?.vadDecisionLatencyMs
+    });
+  }
+
+  queueTurnResponse(options = {}) {
+    this.pendingTurnResponse = options;
+    if (this.responseActive || this.responseCancellationPending || this.toolExecutionActive) return;
+    this.flushPendingTurnResponse();
+  }
+
+  maybeInterruptFromPartialTranscript(itemId, transcript, options = {}) {
+    const turn = this.speechTurns.get(String(itemId ?? ""));
+    if (!turn?.assistantWasPlaying || turn.interrupted || turn.stoppedAt) return false;
+    const elapsedMs = Math.max(0, Date.now() - turn.startedAt);
+    if (elapsedMs < this.bargeInDelayMs) return false;
+    const partial = String(transcript ?? this.partialInputTranscripts.get(turn.itemId) ?? "").trim();
+    const explicitInterrupt = isExplicitInterruptPhrase(partial);
+    const sustainedSpeechDelayMs = Math.max(this.shortBackchannelMaxMs, this.bargeInDelayMs + 250);
+    const generalSpeechReady =
+      (options.allowGeneralSpeech === true || elapsedMs >= sustainedSpeechDelayMs) &&
+      isMeaningfulPartialSpeech(partial);
+    if (!explicitInterrupt && !generalSpeechReady) return false;
+
+    turn.interrupted = true;
+    turn.interruptReason = explicitInterrupt ? "explicit_stop_or_correction" : "meaningful_sustained_caller_speech";
+    if (turn.interruptTimer) clearTimeout(turn.interruptTimer);
+    if (turn.sustainedSpeechTimer) clearTimeout(turn.sustainedSpeechTimer);
+    turn.interruptTimer = undefined;
+    turn.sustainedSpeechTimer = undefined;
+    this.interruptPlayback({ cancelResponse: true, reason: turn.interruptReason });
+    this.log("openai_realtime_agent_meaningful_interruption", {
+      itemId: turn.itemId,
+      reason: turn.interruptReason,
+      elapsedMs,
+      transcriptLength: partial.length
+    });
+    return true;
+  }
+
+  flushPendingTurnResponse() {
+    if (
+      !this.pendingTurnResponse ||
+      this.responseActive ||
+      this.responseCancellationPending ||
+      this.toolExecutionActive
+    ) return;
+    const pending = this.pendingTurnResponse;
+    this.pendingTurnResponse = undefined;
+    this.activeTurnStartedAt = Number(pending.startedAt) || Date.now();
+    this.activeTurnItemId = pending.itemId;
+    this.activeTurnVadDecisionLatencyMs = finiteNumberOrNull(pending.vadDecisionLatencyMs);
+    this.requestResponse(pending.instructions, { toolChoice: pending.toolChoice });
+  }
+
+  isAssistantPlaybackActive() {
+    if (this.responseActive && (this.responseHadAudio || this.currentOutputItemId)) return true;
+    if (!this.firstOutputAudioAt || this.currentOutputBytes <= 0) return false;
+    const bufferedMs = Math.floor(this.currentOutputBytes / PCMU_BYTES_PER_MILLISECOND);
+    const elapsedMs = Math.max(0, Date.now() - this.firstOutputAudioAt);
+    return elapsedMs + 80 < bufferedMs;
+  }
+
+  resolveAcousticTimestamp(audioEndMs, fallbackAt) {
+    if (this.inputAudioTimelineOriginAt === undefined || audioEndMs === null) return fallbackAt;
+    const candidate = this.inputAudioTimelineOriginAt + audioEndMs;
+    const ageMs = fallbackAt - candidate;
+    if (!Number.isFinite(candidate) || ageMs < -500 || ageMs > 30000) return fallbackAt;
+    return candidate;
   }
 }
 
@@ -522,6 +861,58 @@ function summarizeTranscriptionConfidence(logprobs) {
   if (!values.length) return null;
   const probability = values.reduce((sum, value) => sum + Math.exp(value), 0) / values.length;
   return Number(Math.max(0, Math.min(1, probability)).toFixed(4));
+}
+
+function normalizeTurnDecision(value) {
+  if (!value || typeof value !== "object") return {};
+  return {
+    ignore: value.ignore === true,
+    forceRespond: value.forceRespond === true,
+    instructions: typeof value.instructions === "string" && value.instructions.trim()
+      ? value.instructions.trim()
+      : undefined,
+    toolChoice: typeof value.toolChoice === "string" && value.toolChoice.trim()
+      ? value.toolChoice.trim()
+      : undefined
+  };
+}
+
+function isBriefBackchannel(value) {
+  const text = String(value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s。、！？!?.,]/g, "")
+    .replace(/ー+/g, "");
+  return /^(?:はい|うん|ええ|そう|そうです|そうですね|なるほど|わかりました|了解|あ|え|へえ|ふん)$/u.test(text);
+}
+
+function isExplicitInterruptPhrase(value) {
+  const text = String(value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s。、！？!?.,]/g, "");
+  if (!text) return false;
+  return /(?:ちょっと待って|少し待って|待ってください|待って|ストップ|止めて|止まって|話を聞いて|聞いてください|訂正|言い直し|違います|違う違う|いや違う|そうじゃない|キャンセル)/u.test(text);
+}
+
+function isMeaningfulPartialSpeech(value) {
+  const text = String(value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s。、！？!?.,]/g, "");
+  if (text.length < 2 || isBriefBackchannel(text)) return false;
+  return /[\p{L}\p{N}]/u.test(text);
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function finiteNumberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function extractUserVisibleAudioTranscript(response) {

@@ -25,6 +25,7 @@
     "verify:realtime-media": "node scripts/verify-openai-realtime-media.mjs",
     "verify:realtime-agent": "node scripts/verify-openai-realtime-agent.mjs",
     "verify:realtime-agent-safety": "node scripts/verify-realtime-agent-safety.mjs",
+    "verify:realtime-agent-turn-control": "node scripts/verify-realtime-agent-turn-control.mjs",
     "verify:realtime-agent-model": "node scripts/verify-openai-realtime-agent-model.mjs",
     "verify:voice-usage-meter": "node scripts/verify-voice-usage-meter.mjs",
     "verify:demo-business-hour-shifts": "node scripts/verify-demo-business-hour-shifts.mjs",

@@ -25,7 +25,20 @@ if (
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 5 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 6 ||
+  health?.realtimeAgent?.manualTurnControlReady !== true ||
+  health?.realtimeAgent?.automaticVadResponseDisabled !== true ||
+  health?.realtimeAgent?.automaticVadInterruptDisabled !== true ||
+  health?.realtimeAgent?.bargeInDelayMs !== 450 ||
+  health?.realtimeAgent?.shortBackchannelMaxMs !== 900 ||
+  health?.realtimeAgent?.lowConfidenceThreshold !== 0.58 ||
+  health?.realtimeAgent?.transcriptionWatchdogMs !== 2500 ||
+  health?.realtimeAgent?.transcriptionWatchdogReady !== true ||
+  health?.realtimeAgent?.latencyTelemetryReady !== true ||
+  health?.realtimeAgent?.latencySummaryReady !== true ||
+  health?.realtimeAgent?.availabilityEvidenceGateReady !== true ||
+  health?.realtimeAgent?.finalConfirmationPriceRoomReady !== true ||
+  health?.realtimeAgent?.assignmentConsistencyGateReady !== true ||
   health?.realtimeAgent?.firstVisitExplicitAnswerGateReady !== true ||
   health?.realtimeAgent?.forcedToolQuestionReady !== false ||
   health?.realtimeAgent?.ambiguousConfirmationGuardReady !== true ||
@@ -140,6 +153,19 @@ const report = {
   unsignedLegacyWebSocketRejected,
   healthArchitecture: health.realtimeAgent.architecture,
   conversationFlowVersion: health.realtimeAgent.conversationFlowVersion,
+  manualTurnControlReady: health.realtimeAgent.manualTurnControlReady,
+  automaticVadResponseDisabled: health.realtimeAgent.automaticVadResponseDisabled,
+  automaticVadInterruptDisabled: health.realtimeAgent.automaticVadInterruptDisabled,
+  bargeInDelayMs: health.realtimeAgent.bargeInDelayMs,
+  shortBackchannelMaxMs: health.realtimeAgent.shortBackchannelMaxMs,
+  lowConfidenceThreshold: health.realtimeAgent.lowConfidenceThreshold,
+  transcriptionWatchdogMs: health.realtimeAgent.transcriptionWatchdogMs,
+  transcriptionWatchdogReady: health.realtimeAgent.transcriptionWatchdogReady,
+  latencyTelemetryReady: health.realtimeAgent.latencyTelemetryReady,
+  latencySummaryReady: health.realtimeAgent.latencySummaryReady,
+  availabilityEvidenceGateReady: health.realtimeAgent.availabilityEvidenceGateReady,
+  finalConfirmationPriceRoomReady: health.realtimeAgent.finalConfirmationPriceRoomReady,
+  assignmentConsistencyGateReady: health.realtimeAgent.assignmentConsistencyGateReady,
   firstVisitExplicitAnswerGateReady: health.realtimeAgent.firstVisitExplicitAnswerGateReady,
   forcedToolQuestionReady: health.realtimeAgent.forcedToolQuestionReady,
   ambiguousConfirmationGuardReady: health.realtimeAgent.ambiguousConfirmationGuardReady,

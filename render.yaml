@@ -32,6 +32,16 @@ services:
         value: gpt-4o-transcribe
       - key: OPENAI_REALTIME_AGENT_VAD_EAGERNESS
         value: medium
+      - key: OPENAI_REALTIME_AGENT_MANUAL_TURN_CONTROL
+        value: "true"
+      - key: OPENAI_REALTIME_AGENT_BARGE_IN_DELAY_MS
+        value: "450"
+      - key: OPENAI_REALTIME_AGENT_SHORT_BACKCHANNEL_MAX_MS
+        value: "900"
+      - key: OPENAI_REALTIME_AGENT_LOW_CONFIDENCE_THRESHOLD
+        value: "0.58"
+      - key: OPENAI_REALTIME_AGENT_TRANSCRIPTION_WATCHDOG_MS
+        value: "2500"
       - key: OPENAI_REALTIME_AGENT_RESPONSE_WATCHDOG_MS
         value: "12000"
       - key: OPENAI_REALTIME_REQUIRE_TWILIO_SIGNATURE
