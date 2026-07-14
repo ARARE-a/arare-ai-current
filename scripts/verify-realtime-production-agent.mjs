@@ -25,7 +25,8 @@ if (
   health?.legacyTransportSecurity?.twilioSignatureReady !== true ||
   health?.legacyTransportSecurity?.unsignedWebSocketAllowed !== false ||
   !health?.realtimeAgent?.enabled ||
-  health?.realtimeAgent?.conversationFlowVersion !== 15 ||
+  health?.realtimeAgent?.conversationFlowVersion !== 16 ||
+  health?.realtimeAgent?.model !== "gpt-realtime-2.1-mini" ||
   health?.realtimeAgent?.reasoningEffort !== "low" ||
   health?.realtimeAgent?.vadMode !== "server_vad" ||
   health?.realtimeAgent?.vadEagerness !== "medium" ||
@@ -52,6 +53,9 @@ if (
   health?.realtimeAgent?.latencySummaryReady !== true ||
   health?.realtimeAgent?.latencyPersistenceReady !== true ||
   health?.realtimeAgent?.stageLatencyTelemetryReady !== true ||
+  health?.realtimeAgent?.leanConversationReady !== true ||
+  health?.realtimeAgent?.costOptimizedDefaultModelReady !== true ||
+  health?.realtimeAgent?.usageEfficiencyTelemetryReady !== true ||
   health?.realtimeAgent?.nonBlockingConversationPersistenceReady !== true ||
   health?.realtimeAgent?.partialBookingDetailsReady !== true ||
   health?.realtimeAgent?.idempotentCollectedFieldsReady !== true ||

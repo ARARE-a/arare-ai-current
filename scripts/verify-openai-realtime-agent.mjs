@@ -57,7 +57,7 @@ const tools = [
 const bridge = new OpenAiRealtimeAgentBridge({
   twilioSocket: twilio,
   apiKey: "test-key",
-  model: "gpt-realtime-2.1",
+  model: "gpt-realtime-2.1-mini",
   voice: "cedar",
   transcriptionModel: "gpt-4o-transcribe",
   vadMode: "server_vad",
@@ -119,7 +119,7 @@ const bridge = new OpenAiRealtimeAgentBridge({
 await bridge.connect();
 const sessionUpdate = openai.sent[0];
 assert.equal(sessionUpdate.type, "session.update");
-assert.equal(sessionUpdate.session.model, "gpt-realtime-2.1");
+assert.equal(sessionUpdate.session.model, "gpt-realtime-2.1-mini");
 assert.equal(sessionUpdate.session.reasoning.effort, "low");
 assert.equal(sessionUpdate.session.audio.input.turn_detection.type, "server_vad");
 assert.equal(sessionUpdate.session.audio.input.turn_detection.threshold, 0.5);
@@ -141,7 +141,7 @@ const handshakeOpenAi = new FakeSocket({ autoSessionUpdated: false });
 const handshakeBridge = new OpenAiRealtimeAgentBridge({
   twilioSocket: handshakeTwilio,
   apiKey: "test-key",
-  model: "gpt-realtime-2.1",
+  model: "gpt-realtime-2.1-mini",
   voice: "cedar",
   transcriptionModel: "gpt-4o-transcribe",
   instructions: "日本語で応答してください。",
@@ -524,7 +524,7 @@ const preambleTranscripts = [];
 const preambleBridge = new OpenAiRealtimeAgentBridge({
   twilioSocket: preambleTwilio,
   apiKey: "test-key",
-  model: "gpt-realtime-2.1",
+  model: "gpt-realtime-2.1-mini",
   voice: "cedar",
   transcriptionModel: "gpt-4o-transcribe",
   instructions: "日本語で応答してください。",
@@ -549,7 +549,7 @@ preambleOpenAi.emit("message", JSON.stringify({
 preambleOpenAi.emit("message", JSON.stringify({
   type: "response.output_audio_transcript.done",
   item_id: "item_preamble",
-  transcript: "確認しますね。"
+  transcript: "確認します。"
 }));
 preambleOpenAi.emit("message", JSON.stringify({
   type: "response.output_audio.delta",
@@ -562,7 +562,7 @@ preambleOpenAi.emit("message", JSON.stringify({
 }));
 await tick();
 assert.ok(preambleTwilio.sent.some((item) => item.event === "media"));
-assert.deepEqual(preambleTranscripts, ["確認しますね。"]);
+assert.deepEqual(preambleTranscripts, ["確認します。"]);
 preambleBridge.close();
 assert.ok(bridgeLogs.some((item) => item.event === "openai_realtime_agent_tool_loop_guard"));
 

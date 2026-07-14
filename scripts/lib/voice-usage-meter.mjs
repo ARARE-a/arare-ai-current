@@ -70,6 +70,7 @@ export function buildVoiceCostSummary({ accumulator, durationSeconds, provider, 
       twilioInboundVoiceUsdPerMinute: pricing.twilioInboundVoiceUsdPerMinute,
       twilioFeatureUsdPerMinute: twilioFeatureRate,
       usdToJpy,
+      realtimeModelForPricing: pricing.realtimeModelForPricing ?? null,
       pricingCheckedAt: pricing.pricingCheckedAt
     },
     estimatedCost: {

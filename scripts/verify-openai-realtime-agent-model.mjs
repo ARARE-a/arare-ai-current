@@ -16,7 +16,7 @@ const {
 } = await import("./voice-relay-server.mjs");
 
 const apiKey = process.env.OPENAI_API_KEY;
-const model = process.env.OPENAI_REALTIME_AGENT_MODEL ?? process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1";
+const model = process.env.OPENAI_REALTIME_AGENT_MODEL ?? process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1-mini";
 const voice = process.env.OPENAI_REALTIME_AGENT_VOICE ?? "cedar";
 if (!apiKey) throw new Error("OPENAI_API_KEY is required");
 

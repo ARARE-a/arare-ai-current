@@ -98,15 +98,18 @@ assert.deepEqual(tools.find((tool) => tool.name === "find_next_availability").pa
 ]);
 const instructions = buildRealtimeAgentInstructions(session);
 assert.match(instructions, /通常の返答は一文/);
+assert.match(instructions, /目安25文字以内/);
 assert.match(instructions, /質問された時だけ詳しく/);
+assert.match(instructions, /一回一目的/);
 assert.match(instructions, /聞き返すのは同じ項目につき一度まで/);
+assert.match(instructions, /基本順序は、日時、空き確認、コース、指名有無、氏名、発信番号の利用確認、最終確認、SMS/);
 assert.match(instructions, /初回・再来と注意事項確認を独立した質問にしてはいけません/);
 assert.match(instructions, /比較対象として挙げられた全コースの時間と料金を一度に答え/);
 assert.match(instructions, /聞かれていない禁止事項や性的サービスの注意書きを自発的に付けません/);
 assert.match(instructions, /ツール出力は原則として読み上げ原稿ではなく/);
 assert.match(instructions, /search_store_knowledgeがspoken_course_comparisonを返した時/);
-assert.match(instructions, /部屋、内部担当、電話番号、来店歴は読み上げません/);
-assert.match(instructions, /DBの空き確認または最短検索の直前だけ『確認しますね』/);
+assert.match(instructions, /部屋と電話番号はspoken_summaryに含まれる範囲だけ読みます/);
+assert.match(instructions, /DBの空き確認または最短検索の直前だけ『確認します』/);
 assert.match(instructions, /先へ進めません.*禁止/);
 assert.match(instructions, /通話開始時刻（日本時間）/);
 assert.match(instructions, /相対時刻/);
@@ -198,8 +201,10 @@ assert.match(spokenSummary, /90分スタンダードコース/u);
 assert.match(spokenSummary, /17,000円/u);
 assert.match(spokenSummary, /フリー/u);
 assert.match(spokenSummary, /佐藤様/u);
+assert.match(spokenSummary, /Room A/u);
+assert.match(spokenSummary, /電話番号下4桁4404/u);
 assert.match(spokenSummary, /仮受付します。よろしいですか/u);
-assert.doesNotMatch(spokenSummary, /Room|部屋|電話番号|4404|初回|再来/u);
+assert.doesNotMatch(spokenSummary, /初回|再来/u);
 
 markRealtimeAgentAssistantEvidence(
   session,

@@ -35,7 +35,7 @@ const port = Number(process.env.VOICE_RELAY_PORT ?? process.env.PORT ?? 8787);
 const openAiKey = process.env.OPENAI_API_KEY;
 const realtimeModel = process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-2";
 const realtimeMediaEnabled = process.env.OPENAI_REALTIME_MEDIA_ENABLED === "true";
-const realtimeMediaModel = process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1";
+const realtimeMediaModel = process.env.OPENAI_REALTIME_MEDIA_MODEL ?? "gpt-realtime-2.1-mini";
 const realtimeMediaVoice = process.env.OPENAI_REALTIME_MEDIA_VOICE ?? "cedar";
 const realtimeMediaTranscriptionModel = process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ?? "gpt-4o-transcribe";
 const realtimeMediaVadEagerness = normalizeRealtimeVadEagerness(process.env.OPENAI_REALTIME_VAD_EAGERNESS ?? "medium");
@@ -127,12 +127,13 @@ const realtimeAgentQuotaCircuitMs = Math.max(
 const demoAutoBusinessHourShiftsEnabled = process.env.DEMO_AUTO_BUSINESS_HOUR_SHIFTS_ENABLED !== "false";
 const demoAutoShiftStoreId = process.env.DEMO_STORE_ID ?? "demo-store-arare-ai";
 const demoAutoShiftDays = Math.max(7, Number(process.env.DEMO_AUTO_SHIFT_DAYS ?? 90));
+const realtimePricingDefaults = defaultRealtimePricingForModel(realtimeAgentModel || realtimeMediaModel);
 const voiceCostPricing = {
-  realtimeTextInputUsdPerMToken: numberEnv("OPENAI_REALTIME_TEXT_INPUT_USD_PER_MTOK", 4),
-  realtimeCachedInputUsdPerMToken: numberEnv("OPENAI_REALTIME_CACHED_INPUT_USD_PER_MTOK", 0.4),
-  realtimeAudioInputUsdPerMToken: numberEnv("OPENAI_REALTIME_AUDIO_INPUT_USD_PER_MTOK", 32),
-  realtimeTextOutputUsdPerMToken: numberEnv("OPENAI_REALTIME_TEXT_OUTPUT_USD_PER_MTOK", 24),
-  realtimeAudioOutputUsdPerMToken: numberEnv("OPENAI_REALTIME_AUDIO_OUTPUT_USD_PER_MTOK", 64),
+  realtimeTextInputUsdPerMToken: numberEnv("OPENAI_REALTIME_TEXT_INPUT_USD_PER_MTOK", realtimePricingDefaults.textInput),
+  realtimeCachedInputUsdPerMToken: numberEnv("OPENAI_REALTIME_CACHED_INPUT_USD_PER_MTOK", realtimePricingDefaults.cachedInput),
+  realtimeAudioInputUsdPerMToken: numberEnv("OPENAI_REALTIME_AUDIO_INPUT_USD_PER_MTOK", realtimePricingDefaults.audioInput),
+  realtimeTextOutputUsdPerMToken: numberEnv("OPENAI_REALTIME_TEXT_OUTPUT_USD_PER_MTOK", realtimePricingDefaults.textOutput),
+  realtimeAudioOutputUsdPerMToken: numberEnv("OPENAI_REALTIME_AUDIO_OUTPUT_USD_PER_MTOK", realtimePricingDefaults.audioOutput),
   transcriptionTextInputUsdPerMToken: numberEnv("OPENAI_TRANSCRIPTION_TEXT_INPUT_USD_PER_MTOK", 2.5),
   transcriptionAudioInputUsdPerMToken: numberEnv("OPENAI_TRANSCRIPTION_AUDIO_INPUT_USD_PER_MTOK", 2.5),
   transcriptionTextOutputUsdPerMToken: numberEnv("OPENAI_TRANSCRIPTION_TEXT_OUTPUT_USD_PER_MTOK", 10),
@@ -140,7 +141,8 @@ const voiceCostPricing = {
   twilioMediaStreamsUsdPerMinute: numberEnv("TWILIO_MEDIA_STREAMS_USD_PER_MINUTE", 0.0044),
   twilioConversationRelayUsdPerMinute: numberEnv("TWILIO_CONVERSATION_RELAY_USD_PER_MINUTE", 0.07),
   usdToJpy: numberEnv("VOICE_RELAY_USD_TO_JPY", 150),
-  pricingCheckedAt: "2026-07-11"
+  realtimeModelForPricing: realtimeAgentModel || realtimeMediaModel,
+  pricingCheckedAt: "2026-07-14"
 };
 const sharedSecret = process.env.VOICE_RELAY_SHARED_SECRET;
 const validateTwilioSignature = process.env.VOICE_RELAY_VALIDATE_TWILIO_SIGNATURE === "true";
@@ -434,7 +436,7 @@ const server = http.createServer(async (request, response) => {
           noAudioResponseRecoveryReady: true,
           sessionHandshakeReady: true,
           architecture: "native-speech-to-speech",
-          conversationFlowVersion: 15,
+          conversationFlowVersion: 16,
           scriptedReplyPrimary: false,
           manualTurnControlReady: realtimeAgentManualTurnControl,
           automaticVadResponseDisabled: realtimeAgentManualTurnControl,
@@ -448,6 +450,9 @@ const server = http.createServer(async (request, response) => {
           latencySummaryReady: true,
           latencyPersistenceReady: true,
           stageLatencyTelemetryReady: true,
+          leanConversationReady: true,
+          costOptimizedDefaultModelReady: realtimeAgentModel.includes("mini"),
+          usageEfficiencyTelemetryReady: true,
           nonBlockingConversationPersistenceReady: true,
           partialBookingDetailsReady: true,
           idempotentCollectedFieldsReady: true,
@@ -6300,7 +6305,9 @@ function buildFinalConfirmationText(draft) {
   const nomination = draft.nominationIntent
     ? (draft.therapistName ? draft.therapistName + "\u3055\u3093\u6307\u540d" : "\u6307\u540d\u3042\u308a")
     : "\u30d5\u30ea\u30fc";
-  return formatDateTimeJa(draft.startsAt) + "\u3001" + formatCourseNameForSpeech(draft.course.name) + formatDraftOptionsForSpeech(draft) + "\u3001" + formatYen(calculateRealtimeAgentTotalPrice(draft)) + "\u3001" + nomination + "\u3001" + draft.customerName + "\u69d8\u3067\u4eee\u53d7\u4ed8\u3057\u307e\u3059\u3002\u3088\u308d\u3057\u3044\u3067\u3059\u304b\uff1f";
+  const room = draft.assignedRoomName ? "\u3001" + draft.assignedRoomName : "";
+  const phone = phoneLast4(draft.phone) ? "\u3001\u96fb\u8a71\u756a\u53f7\u4e0b4\u6841" + phoneLast4(draft.phone) : "";
+  return formatDateTimeJa(draft.startsAt) + "\u3001" + formatCourseNameForSpeech(draft.course.name) + formatDraftOptionsForSpeech(draft) + "\u3001" + formatYen(calculateRealtimeAgentTotalPrice(draft)) + "\u3001" + nomination + room + "\u3001" + draft.customerName + "\u69d8" + phone + "\u3067\u4eee\u53d7\u4ed8\u3057\u307e\u3059\u3002\u3088\u308d\u3057\u3044\u3067\u3059\u304b\uff1f";
 }
 
 function calculateRealtimeAgentOptionsTotal(options) {
@@ -8042,7 +8049,15 @@ async function recordVoiceUsageMeter(session, provider) {
                   ? realtimeAgentTranscriptionModel
                   : null
             },
-            ...summary
+            ...summary,
+            conversationEfficiency: {
+              assistantUtteranceCount: session.realtimeAgentState?.assistantUtteranceCount ?? 0,
+              clarificationCount: session.realtimeAgentState?.clarificationCount ?? 0,
+              finalConfirmationCount: session.realtimeAgentState?.finalConfirmationCount ?? 0,
+              averageEstimatedJpyPerMinute: summary.durationSeconds > 0
+                ? Math.round((summary.estimatedCost.totalJpy / summary.durationSeconds) * 60)
+                : 0
+            }
           }
         }
       });
@@ -8054,6 +8069,9 @@ async function recordVoiceUsageMeter(session, provider) {
       callSid: session.callSid,
       provider,
       durationSeconds,
+      assistantUtteranceCount: session.realtimeAgentState?.assistantUtteranceCount ?? 0,
+      clarificationCount: session.realtimeAgentState?.clarificationCount ?? 0,
+      finalConfirmationCount: session.realtimeAgentState?.finalConfirmationCount ?? 0,
       totalUsdMicros: summary.estimatedCost.totalUsdMicros,
       estimatedCostJpy: summary.estimatedCost.totalJpy
     });
@@ -8075,6 +8093,24 @@ function usagePeriod(date) {
   const year = parts.find((part) => part.type === "year")?.value ?? String(date.getUTCFullYear());
   const month = parts.find((part) => part.type === "month")?.value ?? String(date.getUTCMonth() + 1).padStart(2, "0");
   return `${year}-${month}`;
+}
+
+function defaultRealtimePricingForModel(model) {
+  return String(model ?? "").includes("mini")
+    ? {
+        textInput: 0.6,
+        cachedInput: 0.06,
+        audioInput: 10,
+        textOutput: 2.4,
+        audioOutput: 20
+      }
+    : {
+        textInput: 4,
+        cachedInput: 0.4,
+        audioInput: 32,
+        textOutput: 24,
+        audioOutput: 64
+      };
 }
 
 function numberEnv(name, fallback) {
@@ -8928,7 +8964,10 @@ function createRealtimeAgentState() {
     confirmationSpokenAtUserSpeechSequence: -1,
     lastAcceptedTurnKey: undefined,
     lastAcceptedTurnAt: 0,
-    toolCallCount: 0
+    toolCallCount: 0,
+    assistantUtteranceCount: 0,
+    clarificationCount: 0,
+    finalConfirmationCount: 0
   };
 }
 
@@ -8962,8 +9001,10 @@ function buildRealtimeAgentInstructions(session) {
   return [
     "# 役割と会話方針",
     "あなたはARARE AIの電話受付です。落ち着いた成人男性の自然な標準語で、予約を最短で受け付けます。",
-    "予約は短く、質問された時だけ詳しく答えます。通常の返答は一文、目安40文字以内です。事実を複数伝える必要がある時も二文、合計80文字以内にします。",
+    "予約は短く、質問された時だけ詳しく答えます。通常の返答は一文、目安25文字以内です。必要時でも60文字以内にします。最終確認だけは必要項目を含めるため長くて構いません。",
+    "話す内容は一回一目的です。空き結果、次の質問、聞かれた質問への答えのどれか一つに絞ります。",
     "『ありがとうございます』『承知しました』『では次に』などの相づちや前置きを毎回付けません。答えだけで通じる時は答えだけを話します。",
+    "『確認できました』を結果の前に付けません。照会後は『23時は空いています』のように結論から話します。",
     "内部処理、登録できない理由、システム都合、残り項目、今後の手順を説明しません。『先へ進めません』『仕組み上』『登録に使えません』『かけ直してください』は禁止です。",
     "利用者が質問したら質問へ先に端的に答えます。雑談や質問が続いている間は予約質問で遮らず、話が落ち着いた時だけ未取得項目を一つ尋ねます。",
     "利用者が複数情報をまとめて話した時は全部受け取り、取得済みの項目を再質問しません。聞き返すのは同じ項目につき一度までです。二度目も曖昧なら、決めつけず別の短い言い方で確認します。説教や長い説明はしません。",
@@ -8972,11 +9013,12 @@ function buildRealtimeAgentInstructions(session) {
     "",
     "# 推論とメッセージチャンネル",
     "直接回答、短い確認、聞き返し、取得済み情報の記録では深く推論せず、すぐ応答します。複数制約の空き確認や副作用の直前だけ必要最小限に推論します。",
-    "commentaryはDBの空き確認または最短検索の直前にだけ使い、発話は『確認しますね』の一文だけにします。直接回答、店舗情報検索、聞き返し、予約項目の質問、最終確認、完了案内ではcommentaryを出しません。",
-    "commentaryとfinal_answerを合わせて、通常一文40文字以内、必要時でも二文80文字以内です。考えている内容、回答方針、整理する旨を利用者へ話しません。",
+    "commentaryはDBの空き確認または最短検索の直前にだけ使い、発話は『確認します』の一文だけにします。直接回答、店舗情報検索、聞き返し、予約項目の質問、最終確認、完了案内ではcommentaryを出しません。",
+    "commentaryとfinal_answerを合わせて、通常一文25文字以内、必要時でも60文字以内です。考えている内容、回答方針、整理する旨を利用者へ話しません。",
     "",
     "# 最短予約レーン",
     "予約に必要なのは、希望日時、コース時間、フリーまたは指名、氏名、SMS送信先、最後の予約内容同意です。初回・再来と注意事項確認を独立した質問にしてはいけません。",
+    "基本順序は、日時、空き確認、コース、指名有無、氏名、発信番号の利用確認、最終確認、SMSです。取得済み項目は飛ばします。",
     "希望日時だけでは空きを確定できないため、コース時間がなければ一度だけ尋ねます。登録コースを聞かれた時だけ、登録済みの時間と料金を短く案内します。",
     "コースの違いを聞かれた時は、比較対象として挙げられた全コースの時間と料金を一度に答え、片方だけ説明してはいけません。施術内容の違いは登録説明がある範囲だけを一文で比較し、未登録なら創作せず、その点だけ未登録と伝えます。",
     "通常コースの質問では、聞かれていない禁止事項や性的サービスの注意書きを自発的に付けません。安全上の質問を受けた時だけ短く回答します。",
@@ -8989,7 +9031,7 @@ function buildRealtimeAgentInstructions(session) {
     "注意事項や店舗ルールへの独立同意は求めません。予約内容への最後の明確な同意を一度だけ取得し、店舗確認が必要な仮受付であることと詳細をSMSで送ります。",
     "",
     "# 発話とツール",
-    "DBの空き確認または最短検索の直前だけ『確認しますね』と一度話して構いません。照会後は『確認できました』を重ねず、結果をすぐ伝えます。",
+    "DBの空き確認または最短検索の直前だけ『確認します』と一度話して構いません。照会後は『確認できました』を重ねず、結果をすぐ伝えます。",
     "ツール出力は原則として読み上げ原稿ではなく、事実、制約、許可された次の行動です。結果を理解したうえで、会話に合う自然な応答、質問、別ツールの実行をあなた自身で選んでください。response_policyがある場合は、対象漏れ、長さ、禁止事項に関する制約を守ります。",
     "唯一の例外として、prepare_final_confirmationがspoken_summaryを返した時、またはsearch_store_knowledgeがspoken_course_comparisonを返した時は、その一文だけを省略・言い換え・追加なしで一度読み上げます。",
     "保持情報に自信がなければget_reception_stateを使い、店舗固有の質問で本文が必要ならsearch_store_knowledgeを使います。検索結果がない内容は推測せず、未確認であることを正直に伝えます。",
@@ -9016,7 +9058,7 @@ function buildRealtimeAgentInstructions(session) {
       ? "- 発信元番号はシステムが取得済みです。利用者が『今かけている番号で大丈夫』『その番号で間違いない』などと自然に明示したら、その許可を一度で記録し、電話番号全桁を改めて読ませません。"
       : "- 電話番号は一度正しく記録できたら、明示的な訂正がない限り再質問しません。",
     "- 電話番号利用は利用者の明示同意だけを記録します。初回・再来や注意事項を会話上の必須質問にしません。",
-    "- 必須情報が揃ったらprepare_final_confirmationを使います。返されたspoken_summaryだけを一度読み上げて待ちます。部屋、内部担当、電話番号、来店歴は読み上げません。",
+    "- 必須情報が揃ったらprepare_final_confirmationを使います。返されたspoken_summaryだけを一度読み上げて待ちます。内部担当と来店歴は読み上げません。部屋と電話番号はspoken_summaryに含まれる範囲だけ読みます。",
     "- create_reservation_holdは、その要約を利用者へ話した後に明確な同意を得た場合だけ使います。訂正や曖昧な返答では使いません。",
     "- 予約作成、SMS送信、変更などの副作用は必ず対応ツールで行います。ツール成功前に実行済みとは言いません。",
     "- 作成されるのは仮受付です。成功後は『仮受付しました。SMSをご確認ください』程度で終え、同じ内容を再度復唱しません。",
@@ -9151,6 +9193,8 @@ function markRealtimeAgentAssistantEvidence(session, transcript) {
   session.realtimeAgentState = state;
   const text = normalizeJapaneseSpeech(transcript);
   state.lastAssistantTranscript = transcript;
+  if (text) state.assistantUtteranceCount += 1;
+  if (isRealtimeAgentClarificationUtterance(text)) state.clarificationCount += 1;
   if (/(?:SMS|ショートメッセージ)/iu.test(text) && /(?:番号|下4桁|電話)/u.test(text)) {
     state.callerPhonePromptSpeechSequence = state.userSpeechSequence;
   }
@@ -9163,7 +9207,13 @@ function markRealtimeAgentAssistantEvidence(session, transcript) {
   if (state.expectedConfirmationText && isRealtimeAgentConfirmationSpoken(session, transcript)) {
     state.confirmationSpoken = true;
     state.confirmationSpokenAtUserSpeechSequence = state.userSpeechSequence;
+    state.finalConfirmationCount += 1;
   }
+}
+
+function isRealtimeAgentClarificationUtterance(text) {
+  return /(?:もう一度|ゆっくり|お願いします|どちら|何時|何分|お名前|電話番号|指名は|コースは|よろしいですか|大丈夫ですか)/u
+    .test(String(text ?? ""));
 }
 
 function isRealtimeAgentConfirmationSpoken(session, transcript) {

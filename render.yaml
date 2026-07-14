@@ -17,7 +17,7 @@ services:
       - key: OPENAI_REALTIME_MEDIA_ENABLED
         value: "true"
       - key: OPENAI_REALTIME_MEDIA_MODEL
-        value: gpt-realtime-2.1
+        value: gpt-realtime-2.1-mini
       - key: OPENAI_REALTIME_MEDIA_VOICE
         value: cedar
       - key: OPENAI_REALTIME_TRANSCRIPTION_MODEL
@@ -25,7 +25,7 @@ services:
       - key: OPENAI_REALTIME_AGENT_ENABLED
         value: "true"
       - key: OPENAI_REALTIME_AGENT_MODEL
-        value: gpt-realtime-2.1
+        value: gpt-realtime-2.1-mini
       - key: OPENAI_REALTIME_AGENT_VOICE
         value: cedar
       - key: OPENAI_REALTIME_AGENT_TRANSCRIPTION_MODEL

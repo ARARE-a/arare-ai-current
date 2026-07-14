@@ -39,7 +39,8 @@ const pricing = {
   twilioMediaStreamsUsdPerMinute: 0.0044,
   twilioConversationRelayUsdPerMinute: 0.07,
   usdToJpy: 150,
-  pricingCheckedAt: "2026-07-11"
+  realtimeModelForPricing: "gpt-realtime-2.1",
+  pricingCheckedAt: "2026-07-14"
 };
 
 const summary = buildVoiceCostSummary({
@@ -55,6 +56,7 @@ assert.equal(summary.usage.realtime.inputCachedTokens, 20);
 assert.equal(summary.usage.realtime.inputAudioTokens, 50);
 assert.equal(summary.usage.transcription.inputAudioTokens, 40);
 assert.equal(summary.estimatedCost.twilioUsdMicros, 28_800);
+assert.equal(summary.pricing.realtimeModelForPricing, "gpt-realtime-2.1");
 assert.ok(summary.estimatedCost.realtimeUsdMicros > 0);
 assert.ok(summary.estimatedCost.transcriptionUsdMicros > 0);
 assert.ok(summary.estimatedCost.totalJpy > 0);
@@ -85,5 +87,22 @@ const cachedSummary = buildVoiceCostSummary({
 assert.equal(cachedSummary.usage.realtime.inputTextTokens, 80);
 assert.equal(cachedSummary.usage.realtime.inputCachedTokens, 20);
 assert.equal(cachedSummary.usage.realtime.inputTextTokens + cachedSummary.usage.realtime.inputCachedTokens, 100);
+
+const miniSummary = buildVoiceCostSummary({
+  accumulator,
+  durationSeconds: 120,
+  provider: "openai_realtime_agent",
+  pricing: {
+    ...pricing,
+    realtimeModelForPricing: "gpt-realtime-2.1-mini",
+    realtimeTextInputUsdPerMToken: 0.6,
+    realtimeCachedInputUsdPerMToken: 0.06,
+    realtimeAudioInputUsdPerMToken: 10,
+    realtimeTextOutputUsdPerMToken: 2.4,
+    realtimeAudioOutputUsdPerMToken: 20
+  }
+});
+assert.equal(miniSummary.pricing.realtimeModelForPricing, "gpt-realtime-2.1-mini");
+assert.ok(miniSummary.estimatedCost.realtimeUsdMicros < agentSummary.estimatedCost.realtimeUsdMicros);
 
 console.log("Voice usage meter verification passed.");

@@ -217,7 +217,7 @@ const latencyEvents = [];
 const bridge = new OpenAiRealtimeAgentBridge({
   twilioSocket: twilio,
   apiKey: "test-key",
-  model: "gpt-realtime-2.1",
+  model: "gpt-realtime-2.1-mini",
   voice: "cedar",
   transcriptionModel: "gpt-4o-transcribe",
   instructions: "Respond naturally in Japanese.",
